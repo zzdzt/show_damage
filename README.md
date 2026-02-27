@@ -34,7 +34,7 @@ The configuration file allows for extensive customization of:
 <!-- Replace '#' below with your actual mod page links -->
 
 [![Download on Modrinth](https://img.shields.io/badge/Download-Modrinth-1bd96a?style=for-the-badge&logo=modrinth)](https://modrinth.com/mod/show-damage)
-[![Download on CurseForge](https://img.shields.io/badge/Download-CurseForge-f16436?style=for-the-badge&logo=curseforge)](https://legacy.curseforge.com/minecraft/mc-mods/show-damage)
+[![Download on CurseForge](https://img.shields.io/badge/Download-CurseForge-f16436?style=for-the-badge&logo=curseforge)](https://www.curseforge.com/minecraft/mc-mods/show-damage)
 
 </div>
 

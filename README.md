@@ -25,6 +25,7 @@ The configuration file allows for extensive customization of:
 ## 📥 下载 / Download
 
 您可以从 Modrinth 或 CurseForge 下载最新版本的模组。
+
 *You can download the latest version of the mod from Modrinth or CurseForge.*
 
 <div align="center">

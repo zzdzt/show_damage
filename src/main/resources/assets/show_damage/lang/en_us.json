@@ -1,0 +1,42 @@
+{
+  "show_damage.config.title": "Damage Number Configuration",
+  "show_damage.category.general": "General Settings",
+  "show_damage.category.physics": "Physics & Effects",
+  
+  "show_damage.option.enabled": "Enable Mod",
+  "show_damage.option.smallThreshold": "Small Damage Threshold",
+  "show_damage.option.mediumThreshold": "Medium Damage Threshold",
+  "show_damage.option.colorSmall": "Small Damage Color",
+  "show_damage.option.colorMedium": "Medium Damage Color",
+  "show_damage.option.colorLarge": "Large Damage Color",
+  "show_damage.option.scaleSmall": "Small Damage Scale",
+  "show_damage.option.scaleMedium": "Medium Damage Scale",
+  "show_damage.option.scaleLarge": "Large Damage Scale",
+
+  "show_damage.option.enableMerge": "Enable Damage Merging",
+  "show_damage.option.mergeTimeout": "Merge Timeout (ms)",
+  "show_damage.option.gravity": "Gravity Value",
+  "show_damage.option.upwardVelocity": "Initial Upward Velocity",
+  "show_damage.option.spread": "Horizontal Spread",
+  "show_damage.option.lifetime": "Particle Lifetime (ticks)",
+  "show_damage.option.fadeStart": "Fade Start Percentage (%)",
+  "show_damage.option.maxDistance": "Max Display Distance (blocks)",
+
+  "show_damage.tooltip.enabled": "Toggle the damage number display feature on or off.",
+  "show_damage.tooltip.smallThreshold": "Damage values below this threshold are considered 'Small'.\nAffects color and size.",
+  "show_damage.tooltip.mediumThreshold": "Damage values below this but above the small threshold are considered 'Medium'.\nAffects color and size.",
+  "show_damage.tooltip.colorFormat": "Format: #RRGGBB\nExample: #FF0000 is Red, #FFFFFF is White.\nSearch 'color hex code' online to find values.",
+  "show_damage.tooltip.scaleSmall": "Adjust the display size for small damage numbers.\nRange: 5-100 (corresponds to 0.5x - 10.0x in-game).",
+  "show_damage.tooltip.scaleMedium": "Adjust the display size for medium damage numbers.\nRange: 5-100 (corresponds to 0.5x - 10.0x in-game).",
+  "show_damage.tooltip.scaleLarge": "Adjust the display size for large damage numbers.\nRange: 5-100 (corresponds to 0.5x - 10.0x in-game).",
+
+
+  "show_damage.tooltip.enableMerge": "When enabled, multiple hits on the same target within a short time (e.g., from shotguns) will be accumulated and displayed as a single total number. Only the latest total is shown.",
+  "show_damage.tooltip.mergeTimeout": "The interval of inactivity (no attacks) required before finalizing and displaying the accumulated damage.\nRecommended: 1000 ms (1 second).",
+  "show_damage.tooltip.gravity": "Controls how fast the damage numbers fall.\nHigher value = faster falling.",
+  "show_damage.tooltip.upwardVelocity": "The initial upward pop-up speed when a damage number spawns.\nHigher value = jumps higher.",
+  "show_damage.tooltip.spread": "The range of random horizontal distribution for damage numbers.\nHigher value = wider spread.",
+  "show_damage.tooltip.lifetime": "Total duration the damage number stays on screen (in game ticks).\n20 ticks = 1 second.",
+  "show_damage.tooltip.fadeStart": "The percentage of lifetime completed before the number starts fading out.\nExample: 80 means it fades during the last 20% of its life.",
+  "show_damage.tooltip.maxDistance": "Damage numbers will not display for targets further than this distance (in blocks).\nLower value improves performance; higher value allows seeing distant damage.\nDefault: 32 blocks."
+}

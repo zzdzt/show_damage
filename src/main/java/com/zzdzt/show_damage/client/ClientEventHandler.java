@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
+import java.util.WeakHashMap;
 
 import com.zzdzt.show_damage.config.ModConfigs;
 import com.zzdzt.show_damage.util.Color;
@@ -13,9 +14,11 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 
 @OnlyIn(Dist.CLIENT)
 @Mod.EventBusSubscriber(modid = "show_damage", bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
@@ -26,9 +29,13 @@ public class ClientEventHandler {
     private static final Map<LivingEntity, Float> damageBuffer = new HashMap<>();
     // Key: 实体, Value: 上次受伤时间
     private static final Map<LivingEntity, Long> lastHitTime = new HashMap<>();
+    // Key: 实体, Value: 当前显示的合并模式粒子
+    private static final Map<LivingEntity, DamageNumberParticle> activeMergeParticles = new WeakHashMap<>();
 
     @SubscribeEvent
     public static void onLivingHurt(LivingHurtEvent event) {
+
+        if (FMLEnvironment.dist != Dist.CLIENT) return;
         Minecraft mc = Minecraft.getInstance();
         
         if (mc.level == null || !mc.level.isClientSide()) {
@@ -54,34 +61,128 @@ public class ClientEventHandler {
         if (config.physics.isMergeEnabled()) {
             handleRealTimeMerge(mc, target, amount, config);
         } else {
-            spawnParticle(mc, target, amount, config);
+            spawnParticle(mc, target, amount, config, false);
         }
     }
 
+    @SubscribeEvent
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (event.getEntity() instanceof LivingEntity entity) {
+            damageBuffer.remove(entity);
+            lastHitTime.remove(entity);
+            
+            DamageNumberParticle particle = activeMergeParticles.remove(entity);
+            if (particle != null && particle.isAlive()) {
+                particle.unfreeze();
+            }
+        }
+    }
+    
     private static void handleRealTimeMerge(Minecraft mc, LivingEntity target, float amount, ModConfigs config) {
         long now = System.currentTimeMillis();
         long timeout = config.physics.getMergeTimeout();
 
-        // 检查是否超时
         Long lastTime = lastHitTime.get(target);
+        
         if (lastTime != null && (now - lastTime) >= timeout) {
+            DamageNumberParticle oldParticle = activeMergeParticles.remove(target);
+            if (oldParticle != null && oldParticle.isAlive()) {
+                oldParticle.unfreeze();
+            }
+            
             damageBuffer.remove(target);
-            DamageNumberParticle.removeParticlesForEntity(target);
+            lastHitTime.remove(target);
         }
 
         float currentTotal = damageBuffer.getOrDefault(target, 0.0f) + amount;
         damageBuffer.put(target, currentTotal);
-
         lastHitTime.put(target, now);
 
-        // 在生成新数字前，移除该实体身上所有旧的伤害数字
-        DamageNumberParticle.removeParticlesForEntity(target);
+        int colorRgb = calculateColor(currentTotal, config);
+        float scale = calculateScale(currentTotal, config);
+        ModConfigs.PhysicsConfig p = config.physics;
 
-        //显示当前的累加总值
-        spawnParticle(mc, target, currentTotal, config);
+        DamageNumberParticle existing = activeMergeParticles.get(target);
+        if (existing != null && existing.isAlive()) {
+            existing.updateDamage(
+                currentTotal, 
+                colorRgb, 
+                scale,
+                p.getGravity(),
+                p.getInitialUpwardVelocity(),
+                p.getLifetime(),
+                p.getFadeStartRatio()
+            );
+            if (!existing.isFrozen()) {
+                existing.freeze();
+            }
+        } else {
+            DamageNumberParticle particle = spawnParticle(mc, target, currentTotal, config, true);
+            if (particle != null) {
+                activeMergeParticles.put(target, particle);
+            }
+        }
         
-        //定期清理过期数据 
         cleanupExpired(mc, config, now);
+    }
+
+    private static int calculateColor(float damage, ModConfigs config) {
+        Color cSm = new Color(config.colorSmall | 0xFF000000);
+        Color cMd = new Color(config.colorMedium | 0xFF000000);
+        Color cLg = new Color(config.colorLarge | 0xFF000000);
+
+        if (damage < config.smallDamageThreshold) {
+            return config.colorSmall;
+        } else if (damage < config.mediumDamageThreshold) {
+            float t = (damage - config.smallDamageThreshold) / (config.mediumDamageThreshold - config.smallDamageThreshold);
+            return Color.lerp(cSm, cMd, t).getRGB();
+        } else {
+            return config.colorLarge;
+        }
+    }
+
+    private static float calculateScale(float damage, ModConfigs config) {
+        if (damage < config.smallDamageThreshold) {
+            return config.getActualScaleSmall();
+        } else if (damage < config.mediumDamageThreshold) {
+            return config.getActualScaleMedium();
+        } else {
+            return config.getActualScaleLarge();
+        }
+    }
+
+    private static DamageNumberParticle spawnParticle(Minecraft mc, LivingEntity target, float damage, 
+                                                      ModConfigs config, boolean isMerged) {
+        if (damage <= 0) return null;
+
+        String text = (damage == (int) damage) ? String.valueOf((int) damage) : String.format("%.1f", damage);
+        int colorRgb = calculateColor(damage, config);
+        float scale = calculateScale(damage, config);
+
+        ModConfigs.PhysicsConfig p = config.physics;
+        
+        double rx = 0, rz = 0;
+        if (!isMerged) {
+            float spread = p.getHorizontalSpreadFactor() * 2.0f;
+            rx = (RANDOM.nextDouble() - 0.5) * spread;
+            rz = (RANDOM.nextDouble() - 0.5) * spread;
+        }
+
+        DamageNumberParticle particle = new DamageNumberParticle(
+            mc.level,
+            target, 
+            target.getX() + rx,
+            target.getY() + target.getBbHeight() * 1.1,
+            target.getZ() + rz,
+            text, colorRgb, scale,
+            p.getGravity(), p.getInitialUpwardVelocity(), 
+            isMerged ? 0 : p.getHorizontalSpreadFactor() * 2.0f,
+            p.getLifetime(), p.getFadeStartRatio(),
+            isMerged
+        );
+        
+        mc.particleEngine.add(particle);
+        return particle;
     }
 
     /**
@@ -96,54 +197,17 @@ public class ClientEventHandler {
             LivingEntity entity = entry.getKey();
             Long time = lastHitTime.get(entity);
 
-            if (entity == null || !entity.isAlive() || (time != null && (now - time) >= timeout * 2)) {
+            if (entity == null || !entity.isAlive() || (time != null && (now - time) >= timeout * 3)) {
                 it.remove();
                 lastHitTime.remove(entity);
+                
+                DamageNumberParticle particle = activeMergeParticles.remove(entity);
+                if (particle != null && particle.isAlive()) {
+                    particle.unfreeze();
+                }
+                
                 DamageNumberParticle.removeParticlesForEntity(entity);
             }
         }
-    }
-
-    private static void spawnParticle(Minecraft mc, LivingEntity target, float damage, ModConfigs config) {
-        if (damage <= 0) return;
-
-        String text = (damage == (int) damage) ? String.valueOf((int) damage) : String.format("%.1f", damage);
-        
-        Color cSm = new Color(config.colorSmall | 0xFF000000);
-        Color cMd = new Color(config.colorMedium | 0xFF000000);
-        Color cLg = new Color(config.colorLarge | 0xFF000000);
-
-        int colorRgb;
-        float scale;
-
-        if (damage < config.smallDamageThreshold) {
-            colorRgb = config.colorSmall;
-            scale = config.getActualScaleSmall();
-        } else if (damage < config.mediumDamageThreshold) {
-            float t = (damage - config.smallDamageThreshold) / (config.mediumDamageThreshold - config.smallDamageThreshold);
-            colorRgb = Color.lerp(cSm, cMd, t).getRGB();
-            scale = config.getActualScaleMedium();
-        } else {
-            colorRgb = config.colorLarge;
-            scale = config.getActualScaleLarge();
-        }
-
-        ModConfigs.PhysicsConfig p = config.physics;
-        float spread = p.getHorizontalSpreadFactor() * 2.0f;
-        double rx = (RANDOM.nextDouble() - 0.5) * spread;
-        double rz = (RANDOM.nextDouble() - 0.5) * spread;
-
-
-        DamageNumberParticle particle = new DamageNumberParticle(
-            mc.level,
-            target, 
-            target.getX() + rx,
-            target.getY() + target.getBbHeight() * 1.1,
-            target.getZ() + rz,
-            text, colorRgb, scale,
-            p.getGravity(), p.getInitialUpwardVelocity(), spread,
-            p.getLifetime(), p.getFadeStartRatio()
-        );
-        mc.particleEngine.add(particle);
     }
 }

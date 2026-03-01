@@ -110,6 +110,17 @@ public class DamageNumberParticle extends Particle {
     
     public void unfreeze() {
         if (this.isFrozen) {
+            if (this.targetEntity != null) {
+                if (this.targetEntity.isAlive()) {
+                    this.x = this.targetEntity.getX() + this.offsetX;
+                    this.y = this.targetEntity.getY() + this.offsetY;
+                    this.z = this.targetEntity.getZ() + this.offsetZ;
+                }
+            // 同步历史位置，避免渲染插值跳跃
+            this.xo = this.x;
+            this.yo = this.y;
+            this.zo = this.z;
+        }
             this.isFrozen = false;
             this.yd = -0.05f;
         }
@@ -187,8 +198,12 @@ public class DamageNumberParticle extends Particle {
 
     @Override
     public void tick() {
+        if (isFrozen && (this.targetEntity == null || !this.targetEntity.isAlive())) {
+        unfreeze();
+    }
+
         if (isFrozen) {
-            if (this.targetEntity == null || !this.targetEntity.isAlive()) {
+            if (this.targetEntity == null) {
                 unfreeze();
                 return;
             }

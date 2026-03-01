@@ -15,73 +15,103 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
-import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.loading.FMLEnvironment;
 
 @OnlyIn(Dist.CLIENT)
 @Mod.EventBusSubscriber(modid = "show_damage", bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public class ClientEventHandler {
 
     private static final Random RANDOM = new Random();
-    // Key: 实体, Value: 当前累加的总伤害
+    
+    private static final Map<LivingEntity, Float> lastHealthMap = new WeakHashMap<>();
+    
     private static final Map<LivingEntity, Float> damageBuffer = new HashMap<>();
     // Key: 实体, Value: 上次受伤时间
     private static final Map<LivingEntity, Long> lastHitTime = new HashMap<>();
     // Key: 实体, Value: 当前显示的合并模式粒子
-    private static final Map<LivingEntity, DamageNumberParticle> activeMergeParticles = new WeakHashMap<>();
+    private static final Map<LivingEntity, DamageNumberParticle> activeMergeParticles = new HashMap<>();
 
     @SubscribeEvent
-    public static void onLivingHurt(LivingHurtEvent event) {
+    public static void onLivingTick(LivingEvent.LivingTickEvent event) {
+        if (!event.getEntity().level().isClientSide()) {
+            return;
+        }
 
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
         Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) {
+            return;
+        }
+
+        LivingEntity entity = event.getEntity();
         
-        if (mc.level == null || !mc.level.isClientSide()) {
+        // 跳过玩家自己
+        if (entity instanceof Player player && mc.player != null 
+                && player.getUUID().equals(mc.player.getUUID())) {
             return;
         }
 
-        LivingEntity target = event.getEntity();
-        float amount = event.getAmount();
-        if (amount <= 0.0F) return;
-
-        ModConfigs config = ModConfigs.get();
-        if (!config.isEnabled) return;
-
-        if (target instanceof Player player && mc.player != null && player.getUUID().equals(mc.player.getUUID())) {
+        float currentHealth = entity.getHealth();
+        //立即获取lastHealth，确保实体还被引用
+        Float lastHealth = lastHealthMap.get(entity);
+        
+        if (lastHealth == null) {
+            lastHealthMap.put(entity, currentHealth);
             return;
         }
         
-        double maxDistSqr = config.physics.getMaxDisplayDistanceSqr();
-        if (mc.player != null && mc.player.distanceToSqr(target) > maxDistSqr) {
-            return;
-        }
+        boolean healthChanged = false;
+        float damage = 0;
+        
+        if (currentHealth < lastHealth) {
 
-        if (config.physics.isMergeEnabled()) {
-            handleRealTimeMerge(mc, target, amount, config);
-        } else {
-            spawnParticle(mc, target, amount, config, false);
+            damage = lastHealth - currentHealth;
+            healthChanged = true;      
+            lastHealthMap.put(entity, currentHealth);
+            processDamage(mc, entity, damage);
+            
+        } else if (currentHealth > lastHealth) {
+            lastHealthMap.put(entity, currentHealth);
+            healthChanged = true;
+        }
+        
+        if (!entity.isAlive()) {
+            handleEntityDeath(entity);
         }
     }
 
     @SubscribeEvent
     public static void onEntityLeave(EntityLeaveLevelEvent event) {
         if (event.getEntity() instanceof LivingEntity entity) {
-            damageBuffer.remove(entity);
-            lastHitTime.remove(entity);
-            
-            DamageNumberParticle particle = activeMergeParticles.remove(entity);
-            if (particle != null && particle.isAlive()) {
-                particle.unfreeze();
-            }
+            cleanupAllEntityData(entity, false);
         }
     }
     
+    private static void processDamage(Minecraft mc, LivingEntity entity, float damage) {
+        ModConfigs config = ModConfigs.get();
+        if (!config.isEnabled) {
+            return;
+        }
+        
+        // 距离检查
+        double maxDistSqr = config.physics.getMaxDisplayDistanceSqr();
+        if (mc.player != null && mc.player.distanceToSqr(entity) > maxDistSqr) {
+            return;
+        }
+
+        // 处理伤害显示
+        if (config.physics.isMergeEnabled()) {
+            handleRealTimeMerge(mc, entity, damage, config);
+        } else {
+            spawnParticle(mc, entity, damage, config, false);
+        }
+    }
+
     private static void handleRealTimeMerge(Minecraft mc, LivingEntity target, float amount, ModConfigs config) {
+
         long now = System.currentTimeMillis();
         long timeout = config.physics.getMergeTimeout();
-
         Long lastTime = lastHitTime.get(target);
         
         if (lastTime != null && (now - lastTime) >= timeout) {
@@ -91,7 +121,6 @@ public class ClientEventHandler {
             }
             
             damageBuffer.remove(target);
-            lastHitTime.remove(target);
         }
 
         float currentTotal = damageBuffer.getOrDefault(target, 0.0f) + amount;
@@ -103,6 +132,7 @@ public class ClientEventHandler {
         ModConfigs.PhysicsConfig p = config.physics;
 
         DamageNumberParticle existing = activeMergeParticles.get(target);
+
         if (existing != null && existing.isAlive()) {
             existing.updateDamage(
                 currentTotal, 
@@ -123,7 +153,7 @@ public class ClientEventHandler {
             }
         }
         
-        cleanupExpired(mc, config, now);
+        cleanupExpired(config, now);
     }
 
     private static int calculateColor(float damage, ModConfigs config) {
@@ -186,28 +216,63 @@ public class ClientEventHandler {
     }
 
     /**
-     * 清理超时太久的数据 ，防止内存泄漏
+     * 清理过期数据 - 只清理真正超时的，不清理死亡的（死亡由handleEntityDeath处理）
      */
-    private static void cleanupExpired(Minecraft mc, ModConfigs config, long now) {
+    private static void cleanupExpired(ModConfigs config, long now) {
         long timeout = config.physics.getMergeTimeout();
-        Iterator<Map.Entry<LivingEntity, Float>> it = damageBuffer.entrySet().iterator();
         
-        while (it.hasNext()) {
-            Map.Entry<LivingEntity, Float> entry = it.next();
+        // 清理damageBuffer中的过期条目
+        Iterator<Map.Entry<LivingEntity, Float>> bufferIt = damageBuffer.entrySet().iterator();
+        while (bufferIt.hasNext()) {
+            Map.Entry<LivingEntity, Float> entry = bufferIt.next();
             LivingEntity entity = entry.getKey();
+            
+            // 跳过null或已死亡的实体（由handleEntityDeath处理）
+            if (entity == null || !entity.isAlive()) {
+                continue;
+            }
+            
             Long time = lastHitTime.get(entity);
-
-            if (entity == null || !entity.isAlive() || (time != null && (now - time) >= timeout * 3)) {
-                it.remove();
+            if (time != null && (now - time) >= timeout * 3) {
+                bufferIt.remove();
                 lastHitTime.remove(entity);
                 
                 DamageNumberParticle particle = activeMergeParticles.remove(entity);
                 if (particle != null && particle.isAlive()) {
                     particle.unfreeze();
                 }
-                
-                DamageNumberParticle.removeParticlesForEntity(entity);
             }
+        }
+    }
+    
+    /**
+     * 处理实体死亡 - 解冻粒子让玩家看到最终伤害
+     */
+    private static void handleEntityDeath(LivingEntity entity) {
+        // 实体已死亡，不需要再追踪生命值
+        lastHealthMap.remove(entity);
+        
+        damageBuffer.remove(entity);
+        lastHitTime.remove(entity);
+        
+        // 解冻合并粒子，让玩家看到最终总伤害数字飘落
+        DamageNumberParticle particle = activeMergeParticles.remove(entity);
+        if (particle != null && particle.isAlive()) {
+            particle.unfreeze();
+        }
+    }
+    
+    /**
+     * 完全清理实体所有数据（用于实体离开世界）
+     */
+    private static void cleanupAllEntityData(LivingEntity entity, boolean unfreezeParticle) {
+        lastHealthMap.remove(entity);
+        damageBuffer.remove(entity);
+        lastHitTime.remove(entity);
+        
+        DamageNumberParticle particle = activeMergeParticles.remove(entity);
+        if (particle != null && particle.isAlive() && unfreezeParticle) {
+            particle.unfreeze();
         }
     }
 }

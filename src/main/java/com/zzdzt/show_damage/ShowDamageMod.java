@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 @Mod("show_damage")
 public class ShowDamageMod {
     public static final String MOD_ID = "show_damage";
-    private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     public ShowDamageMod() {
         ModConfigs.register();
@@ -25,6 +25,6 @@ public class ShowDamageMod {
         );
 
 
-        LOGGER.info("Show Damage loaded! Event listener registered MANUALLY.");
+        LOGGER.info("Show Damage loaded! Debug logging enabled.");
     }
 }

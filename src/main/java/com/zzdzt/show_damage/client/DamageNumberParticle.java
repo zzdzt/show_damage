@@ -115,12 +115,14 @@ public class DamageNumberParticle extends Particle {
                     this.x = this.targetEntity.getX() + this.offsetX;
                     this.y = this.targetEntity.getY() + this.offsetY;
                     this.z = this.targetEntity.getZ() + this.offsetZ;
+                } else {
+
                 }
-            // 同步历史位置，避免渲染插值跳跃
-            this.xo = this.x;
-            this.yo = this.y;
-            this.zo = this.z;
-        }
+                
+                this.xo = this.x;
+                this.yo = this.y;
+                this.zo = this.z;
+            }
             this.isFrozen = false;
             this.yd = -0.05f;
         }
@@ -254,13 +256,20 @@ public class DamageNumberParticle extends Particle {
         this.lifetime = newLifetime;
         this.startFadeAge = (int)(newLifetime * fadeRatio);
         
-        this.age = 0;
-        
-        if (this.isFrozen && this.targetEntity != null) {
+        if (this.isFrozen && this.targetEntity != null && this.targetEntity.isAlive()) {
+            // 先更新粒子位置到实体当前位置（使用旧偏移）
+            this.x = this.targetEntity.getX() + this.offsetX;
+            this.y = this.targetEntity.getY() + this.offsetY;
+            this.z = this.targetEntity.getZ() + this.offsetZ;
+            
+            // 现在重新计算偏移（此时 this.x 和实体位置是同步的）
             this.offsetX = this.x - this.targetEntity.getX();
             this.offsetY = this.y - this.targetEntity.getY();
             this.offsetZ = this.z - this.targetEntity.getZ();
         }
+        
+        this.age = 0;
+        
     }
 
     public boolean isAlive() {

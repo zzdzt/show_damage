@@ -34,7 +34,7 @@ public class ModConfigs implements ConfigData {
 
     public static class PhysicsConfig {
         @ConfigEntry.BoundedDiscrete(min = 0, max = 100) public int gravityValue = 15;
-        @ConfigEntry.BoundedDiscrete(min = 0, max = 500) public int initialUpwardVelocity = 200;
+        @ConfigEntry.BoundedDiscrete(min = 0, max = 500) public int initialUpwardVelocity = 150;
         @ConfigEntry.BoundedDiscrete(min = 0, max = 600) public int horizontalSpread = 150;
         @ConfigEntry.BoundedDiscrete(min = 10, max = 300) public int lifetimeTicks = 30;
         @ConfigEntry.BoundedDiscrete(min = 50, max = 95) public int fadeStartPercent = 80;

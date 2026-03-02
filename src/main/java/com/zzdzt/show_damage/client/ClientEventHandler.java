@@ -1,59 +1,54 @@
 package com.zzdzt.show_damage.client;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Random;
-import java.util.WeakHashMap;
-
 import com.zzdzt.show_damage.config.ModConfigs;
 import com.zzdzt.show_damage.util.Color;
-
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+
+import java.util.*;
 
 @OnlyIn(Dist.CLIENT)
 @Mod.EventBusSubscriber(modid = "show_damage", bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public class ClientEventHandler {
 
     private static final Random RANDOM = new Random();
-    
     private static final Map<LivingEntity, Float> lastHealthMap = new WeakHashMap<>();
     
-    private static final Map<LivingEntity, Float> damageBuffer = new HashMap<>();
-    // Key: 实体, Value: 上次受伤时间
-    private static final Map<LivingEntity, Long> lastHitTime = new HashMap<>();
-    // Key: 实体, Value: 当前显示的合并模式粒子
-    private static final Map<LivingEntity, DamageNumberParticle> activeMergeParticles = new HashMap<>();
+    private static class MergeSession {
+        DamageNumberParticle particle;
+        float totalDamage;
+        long lastHitTime;
+        Vec3 lastEntityPos;  // 记录上次位置用于计算速度
+    }
+    
+    private static final Map<LivingEntity, MergeSession> mergeSessions = new HashMap<>();
 
     @SubscribeEvent
     public static void onLivingTick(LivingEvent.LivingTickEvent event) {
-        if (!event.getEntity().level().isClientSide()) {
-            return;
-        }
+        if (!event.getEntity().level().isClientSide()) return;
 
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) {
-            return;
-        }
+        if (mc.level == null) return;
 
         LivingEntity entity = event.getEntity();
         
-        // 跳过玩家自己
+        // 跳过玩家自己（第一人称不显示自己的伤害）
         if (entity instanceof Player player && mc.player != null 
                 && player.getUUID().equals(mc.player.getUUID())) {
             return;
         }
 
         float currentHealth = entity.getHealth();
-        //立即获取lastHealth，确保实体还被引用
         Float lastHealth = lastHealthMap.get(entity);
         
         if (lastHealth == null) {
@@ -61,99 +56,205 @@ public class ClientEventHandler {
             return;
         }
         
-        boolean healthChanged = false;
-        float damage = 0;
-        
         if (currentHealth < lastHealth) {
-
-            damage = lastHealth - currentHealth;
-            healthChanged = true;      
+            float damage = lastHealth - currentHealth;
             lastHealthMap.put(entity, currentHealth);
             processDamage(mc, entity, damage);
-            
         } else if (currentHealth > lastHealth) {
+            // 治疗或回血，更新记录但不生成粒子
             lastHealthMap.put(entity, currentHealth);
-            healthChanged = true;
         }
+    }
+
+    @SubscribeEvent
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         
-        if (!entity.isAlive()) {
-            handleEntityDeath(entity);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        
+        ModConfigs config = ModConfigs.get();
+        long now = System.currentTimeMillis();
+        
+        Iterator<Map.Entry<LivingEntity, MergeSession>> it = mergeSessions.entrySet().iterator();
+        
+        while (it.hasNext()) {
+            Map.Entry<LivingEntity, MergeSession> entry = it.next();
+            LivingEntity entity = entry.getKey();
+            MergeSession session = entry.getValue();
+            
+            boolean timeout = (now - session.lastHitTime) >= config.physics.getMergeTimeout();
+            boolean dead = !entity.isAlive();
+            boolean particleDead = !session.particle.isAlive();
+            
+            if (timeout || dead || particleDead) {
+                session.particle.setFollowing(false);
+                
+                if (timeout && !dead && entity.isAlive()) {
+                    // 释放时也使用合并位置
+                    Vec3 currentPos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera());
+                    session.particle.setPosition(currentPos.x, currentPos.y, currentPos.z);
+                }
+                
+                it.remove();
+                continue;
+            }
+            
+            // 更新跟随位置 - 使用合并专用的高位置
+            Vec3 pos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera());
+            session.particle.setPosition(pos.x, pos.y, pos.z);
+            session.lastEntityPos = entity.position();
         }
     }
 
     @SubscribeEvent
     public static void onEntityLeave(EntityLeaveLevelEvent event) {
         if (event.getEntity() instanceof LivingEntity entity) {
-            cleanupAllEntityData(entity, false);
+            cleanupEntity(entity);
         }
     }
     
     private static void processDamage(Minecraft mc, LivingEntity entity, float damage) {
         ModConfigs config = ModConfigs.get();
-        if (!config.isEnabled) {
-            return;
-        }
+        if (!config.isEnabled) return;
         
-        // 距离检查
+        // 生成时距离检查
         double maxDistSqr = config.physics.getMaxDisplayDistanceSqr();
         if (mc.player != null && mc.player.distanceToSqr(entity) > maxDistSqr) {
             return;
         }
 
-        // 处理伤害显示
         if (config.physics.isMergeEnabled()) {
-            handleRealTimeMerge(mc, entity, damage, config);
+            handleMerge(mc, entity, damage, config);
         } else {
-            spawnParticle(mc, entity, damage, config, false);
+            spawnIndependentParticle(mc, entity, damage, config);
         }
     }
 
-    private static void handleRealTimeMerge(Minecraft mc, LivingEntity target, float amount, ModConfigs config) {
-
+    private static void handleMerge(Minecraft mc, LivingEntity target, float damage, ModConfigs config) {
         long now = System.currentTimeMillis();
-        long timeout = config.physics.getMergeTimeout();
-        Long lastTime = lastHitTime.get(target);
-        
-        if (lastTime != null && (now - lastTime) >= timeout) {
-            DamageNumberParticle oldParticle = activeMergeParticles.remove(target);
-            if (oldParticle != null && oldParticle.isAlive()) {
-                oldParticle.unfreeze();
-            }
-            
-            damageBuffer.remove(target);
-        }
-
-        float currentTotal = damageBuffer.getOrDefault(target, 0.0f) + amount;
-        damageBuffer.put(target, currentTotal);
-        lastHitTime.put(target, now);
-
-        int colorRgb = calculateColor(currentTotal, config);
-        float scale = calculateScale(currentTotal, config);
+        MergeSession session = mergeSessions.get(target);
         ModConfigs.PhysicsConfig p = config.physics;
-
-        DamageNumberParticle existing = activeMergeParticles.get(target);
-
-        if (existing != null && existing.isAlive()) {
-            existing.updateDamage(
-                currentTotal, 
-                colorRgb, 
-                scale,
-                p.getGravity(),
-                p.getInitialUpwardVelocity(),
+        
+        if (session != null && session.particle.isAlive()) {
+            // 合并伤害
+            session.totalDamage += damage;
+            session.lastHitTime = now;
+            
+            // 更新显示内容，触发弹跳动画
+            session.particle.updateContent(
+                formatDamage(session.totalDamage),
+                calculateColor(session.totalDamage, config),
+                calculateScale(session.totalDamage, config),
                 p.getLifetime(),
                 p.getFadeStartRatio()
             );
-            if (!existing.isFrozen()) {
-                existing.freeze();
-            }
+            
         } else {
-            DamageNumberParticle particle = spawnParticle(mc, target, currentTotal, config, true);
-            if (particle != null) {
-                activeMergeParticles.put(target, particle);
+            // 创建新的合并粒子
+            Camera camera = mc.gameRenderer.getMainCamera();
+            Vec3 pos = getMergeDisplayPos(target, camera);
+            
+            DamageNumberParticle particle = new DamageNumberParticle(
+                mc.level,
+                pos.x, pos.y, pos.z,
+                formatDamage(damage),
+                calculateColor(damage, config),
+                calculateScale(damage, config),
+                p.getLifetime(),
+                p.getFadeStartRatio(),
+                p.getGravity(),
+                p.getInitialUpwardVelocity(),
+                p.getHorizontalSpreadFactor() * 2.0f,
+                false  // 合并模式不需要初始爆发
+            );
+            
+            particle.setFollowing(true);
+            mc.particleEngine.add(particle);
+            
+            MergeSession newSession = new MergeSession();
+            newSession.particle = particle;
+            newSession.totalDamage = damage;
+            newSession.lastHitTime = now;
+            newSession.lastEntityPos = target.position();
+            mergeSessions.put(target, newSession);
+        }
+    }
+
+    private static Vec3 getMergeDisplayPos(LivingEntity entity, Camera camera) {
+        Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * 1.1, 0);
+            
+            if (camera == null) {
+                return entityPos.add(0, 0.8, 0);
             }
+            
+            Vec3 cameraPos = camera.getPosition();
+            double offsetDist = entity.getBbWidth() * 0.5;
+            
+            Vec3 toCamera = cameraPos.subtract(entityPos).normalize();
+            Vec3 offset = toCamera.scale(offsetDist);
+            
+            // 额外抬高 0.6 格，确保在头顶上方清晰可见
+            return entityPos.add(offset).add(0, 0.3, 0);
+    }
+
+    private static void spawnIndependentParticle(Minecraft mc, LivingEntity target, float damage, ModConfigs config) {
+        ModConfigs.PhysicsConfig p = config.physics;
+        
+        // 使用相机偏移计算生成位置
+        Camera camera = mc.gameRenderer.getMainCamera();
+        Vec3 pos = getDisplayPos(target, camera);
+        
+        // 添加一点随机偏移，避免多个数字完全重叠
+        double spread = p.getHorizontalSpreadFactor();
+        pos = pos.add(
+            (RANDOM.nextDouble() - 0.5) * spread * 0.5,
+            (RANDOM.nextDouble() - 0.5) * 0.1,
+            (RANDOM.nextDouble() - 0.5) * spread * 0.5
+        );
+        
+        DamageNumberParticle particle = new DamageNumberParticle(
+            mc.level,
+            pos.x, pos.y, pos.z,
+            formatDamage(damage),
+            calculateColor(damage, config),
+            calculateScale(damage, config),
+            p.getLifetime(),
+            p.getFadeStartRatio(),
+            p.getGravity(),
+            p.getInitialUpwardVelocity(),
+            p.getHorizontalSpreadFactor() * 2.0f,
+            true  // 独立模式需要初始爆发
+        );
+        
+        mc.particleEngine.add(particle);
+    }
+
+    /**
+     * 计算显示位置 - 采用 ToroHealth 的相机偏移策略
+     */
+    private static Vec3 getDisplayPos(LivingEntity entity, Camera camera) {
+        // 实体中心偏上位置
+        Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * 0.8, 0);
+        
+        if (camera == null) {
+            return entityPos.add(0, 0.5, 0);
         }
         
-        cleanupExpired(config, now);
+        // 计算朝向相机的偏移
+        Vec3 cameraPos = camera.getPosition();
+        double offsetDist = entity.getBbWidth() * 0.6;
+        
+        // 从实体指向相机的向量，归一化后乘以偏移距离
+        Vec3 toCamera = cameraPos.subtract(entityPos).normalize();
+        Vec3 offset = toCamera.scale(offsetDist);
+        
+        // 在朝向相机的一侧生成，稍微偏上一点
+        return entityPos.add(offset).add(0, 0.2, 0);
+    }
+
+    private static String formatDamage(float damage) {
+        return (damage == (int) damage) ? String.valueOf((int) damage) : String.format("%.1f", damage);
     }
 
     private static int calculateColor(float damage, ModConfigs config) {
@@ -181,98 +282,11 @@ public class ClientEventHandler {
         }
     }
 
-    private static DamageNumberParticle spawnParticle(Minecraft mc, LivingEntity target, float damage, 
-                                                      ModConfigs config, boolean isMerged) {
-        if (damage <= 0) return null;
-
-        String text = (damage == (int) damage) ? String.valueOf((int) damage) : String.format("%.1f", damage);
-        int colorRgb = calculateColor(damage, config);
-        float scale = calculateScale(damage, config);
-
-        ModConfigs.PhysicsConfig p = config.physics;
-        
-        double rx = 0, rz = 0;
-        if (!isMerged) {
-            float spread = p.getHorizontalSpreadFactor() * 2.0f;
-            rx = (RANDOM.nextDouble() - 0.5) * spread;
-            rz = (RANDOM.nextDouble() - 0.5) * spread;
-        }
-
-        DamageNumberParticle particle = new DamageNumberParticle(
-            mc.level,
-            target, 
-            target.getX() + rx,
-            target.getY() + target.getBbHeight() * 1.1,
-            target.getZ() + rz,
-            text, colorRgb, scale,
-            p.getGravity(), p.getInitialUpwardVelocity(), 
-            isMerged ? 0 : p.getHorizontalSpreadFactor() * 2.0f,
-            p.getLifetime(), p.getFadeStartRatio(),
-            isMerged
-        );
-        
-        mc.particleEngine.add(particle);
-        return particle;
-    }
-
-    /**
-     * 清理过期数据 - 只清理真正超时的，不清理死亡的（死亡由handleEntityDeath处理）
-     */
-    private static void cleanupExpired(ModConfigs config, long now) {
-        long timeout = config.physics.getMergeTimeout();
-        
-        // 清理damageBuffer中的过期条目
-        Iterator<Map.Entry<LivingEntity, Float>> bufferIt = damageBuffer.entrySet().iterator();
-        while (bufferIt.hasNext()) {
-            Map.Entry<LivingEntity, Float> entry = bufferIt.next();
-            LivingEntity entity = entry.getKey();
-            
-            // 跳过null或已死亡的实体（由handleEntityDeath处理）
-            if (entity == null || !entity.isAlive()) {
-                continue;
-            }
-            
-            Long time = lastHitTime.get(entity);
-            if (time != null && (now - time) >= timeout * 3) {
-                bufferIt.remove();
-                lastHitTime.remove(entity);
-                
-                DamageNumberParticle particle = activeMergeParticles.remove(entity);
-                if (particle != null && particle.isAlive()) {
-                    particle.unfreeze();
-                }
-            }
-        }
-    }
-    
-    /**
-     * 处理实体死亡 - 解冻粒子让玩家看到最终伤害
-     */
-    private static void handleEntityDeath(LivingEntity entity) {
-        // 实体已死亡，不需要再追踪生命值
+    private static void cleanupEntity(LivingEntity entity) {
         lastHealthMap.remove(entity);
-        
-        damageBuffer.remove(entity);
-        lastHitTime.remove(entity);
-        
-        // 解冻合并粒子，让玩家看到最终总伤害数字飘落
-        DamageNumberParticle particle = activeMergeParticles.remove(entity);
-        if (particle != null && particle.isAlive()) {
-            particle.unfreeze();
-        }
-    }
-    
-    /**
-     * 完全清理实体所有数据（用于实体离开世界）
-     */
-    private static void cleanupAllEntityData(LivingEntity entity, boolean unfreezeParticle) {
-        lastHealthMap.remove(entity);
-        damageBuffer.remove(entity);
-        lastHitTime.remove(entity);
-        
-        DamageNumberParticle particle = activeMergeParticles.remove(entity);
-        if (particle != null && particle.isAlive() && unfreezeParticle) {
-            particle.unfreeze();
+        MergeSession session = mergeSessions.remove(entity);
+        if (session != null && session.particle.isAlive()) {
+            session.particle.setFollowing(false);
         }
     }
 }

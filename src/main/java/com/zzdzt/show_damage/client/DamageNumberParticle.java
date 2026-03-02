@@ -1,15 +1,9 @@
 package com.zzdzt.show_damage.client;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.WeakHashMap;
-
-import org.jetbrains.annotations.NotNull;
-
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
+import com.zzdzt.show_damage.config.ModConfigs;
 
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -20,113 +14,124 @@ import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.Random;
 
 public class DamageNumberParticle extends Particle {
-    private static final Map<LivingEntity, Set<DamageNumberParticle>> ACTIVE_PARTICLES = new WeakHashMap<>();
     private static final Random RANDOM = new Random();
-
-    private final boolean isMergedParticle;
-
-    private String text;
-    private int baseColorRgb;
-    private float scale;
     
-    private float gravity;
-    private float initialUpwardVel;
-    private int lifetime;
+    // 显示内容
+    private String text;
+    private int colorRgb;
+    private float targetScale;
+    private float currentScale;
+    private float scaleVelocity;  // 弹性缩放的速度
+    
+    // 生命周期
+    private int maxAge;
     private int startFadeAge;
     
-    private final float drag = 0.96f;
-    private final LivingEntity targetEntity;
+    // 物理系统 - 分离加速度、速度、位置
+    private double ax, ay, az;      // 加速度
+    private double vx, vy, vz;      // 速度
+    private double gravity;         // 重力加速度
+    private double drag;            // 空气阻力系数
+    
+    // 状态
+    private boolean isFollowing = false;
+    private boolean hasInitialBurst = false;
+    
+    // 渲染优化
+    private float rotation;
+    private float rotationVelocity;
 
-    private boolean isFrozen = false;
-    private double offsetX, offsetY, offsetZ;
-
-    public DamageNumberParticle(ClientLevel level, LivingEntity target, double x, double y, double z, 
+    public DamageNumberParticle(ClientLevel level, double x, double y, double z,
                                 String text, int colorRgb, float scale, 
-                                float gravity, float initialUpwardVel, float horizontalSpread,
-                                int lifetime, float fadeRatio, boolean isMerged) {
+                                int lifetime, float fadeRatio,
+                                double gravity, double initialUpwardVel, 
+                                double horizontalSpread, boolean shouldBurst) {
         super(level, x, y, z);
+        this.xo = x;
+        this.yo = y;
+        this.zo = z;
         
-        this.isMergedParticle = isMerged;
-        this.targetEntity = target;
         this.text = text;
-        this.baseColorRgb = colorRgb & 0x00FFFFFF;
-        this.scale = scale;
-        this.gravity = gravity;
-        this.initialUpwardVel = initialUpwardVel;
-        this.lifetime = lifetime;
-        this.hasPhysics = false;
+        this.colorRgb = colorRgb & 0x00FFFFFF;
+        this.targetScale = scale;
+        this.currentScale = 0;
+        this.scaleVelocity = 0;
+        this.maxAge = lifetime;
         this.startFadeAge = (int)(lifetime * fadeRatio);
-
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null && mc.gameRenderer != null) {
-            Vec3 entityCenter = target.position().add(0, target.getBbHeight() * 0.8, 0);
-            Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
-            Vec3 toCamera = cameraPos.subtract(entityCenter).normalize();
-            
-            double offsetDist = Math.max(0.3, target.getBbWidth() * 0.6);
-            Vec3 offset = toCamera.scale(offsetDist);
-            
-            this.x += offset.x;
-            this.y += offset.y + 0.3;  
-            this.z += offset.z;
-        }
+        this.gravity = gravity;
+        this.drag = 0.92;  // 空气阻力
+        this.hasPhysics = false;
         
-        this.xo = this.x;
-        this.yo = this.y;
-        this.zo = this.z;
-
-        if (isMerged) {
-            this.xd = 0;
-            this.zd = 0;
-            this.yd = initialUpwardVel;
+        // 初始化速度 - 使用正态分布让运动更自然
+        if (shouldBurst) {
+            // 水平方向：正态分布随机，大部分集中在中间
+            this.vx = RANDOM.nextGaussian() * horizontalSpread * 0.3;
+            this.vz = RANDOM.nextGaussian() * horizontalSpread * 0.3;
+            // 垂直方向：明确的向上初速度 + 小随机
+            this.vy = initialUpwardVel + (RANDOM.nextGaussian() * 0.02);
+            this.hasInitialBurst = true;
+            
+            // 微小的旋转
+            this.rotationVelocity = (float)(RANDOM.nextGaussian() * 2.0);
         } else {
-            this.xd = (float)(RANDOM.nextGaussian() * 0.02 * horizontalSpread);
-            this.zd = (float)(RANDOM.nextGaussian() * 0.02 * horizontalSpread);
-            this.yd = initialUpwardVel + (float)(RANDOM.nextGaussian() * 0.02);
+            this.vx = 0;
+            this.vy = 0;
+            this.vz = 0;
+            this.rotationVelocity = 0;
         }
-
-        ACTIVE_PARTICLES.computeIfAbsent(target, k -> Collections.newSetFromMap(new WeakHashMap<>())).add(this);
+        this.rotation = 0;
+        
+        // 初始化加速度
+        this.ax = 0;
+        this.ay = 0;
+        this.az = 0;
     }
 
-    public LivingEntity getTargetEntity() {
-        return this.targetEntity;
+    public void updateContent(String newText, int newColor, float newScale, 
+                             int newLifetime, float fadeRatio) {
+        this.text = newText;
+        this.colorRgb = newColor & 0x00FFFFFF;
+        this.targetScale = newScale;
+        this.maxAge = newLifetime;
+        this.startFadeAge = (int)(newLifetime * fadeRatio);
+        this.age = 0;
+        // 更新时给一个"弹跳"效果
+        this.scaleVelocity = (newScale - this.currentScale) * 0.5f;
     }
-    
-    public void freeze() {
-        if (this.targetEntity != null) {
-            this.isFrozen = true;
-            this.offsetX = this.x - this.targetEntity.getX();
-            this.offsetY = this.y - this.targetEntity.getY();
-            this.offsetZ = this.z - this.targetEntity.getZ();
-            this.xd = 0;
-            this.yd = 0;
-            this.zd = 0;
-        }
-    }
-    
-    public void unfreeze() {
-        if (this.isFrozen) {
-            if (this.targetEntity != null) {
 
-                this.x = this.targetEntity.getX() + this.offsetX;
-                this.y = this.targetEntity.getY() + this.offsetY;
-                this.z = this.targetEntity.getZ() + this.offsetZ;
-                
-                this.xo = this.x;
-                this.yo = this.y;
-                this.zo = this.z;
-            }
-            this.isFrozen = false;
-            this.yd = -0.05f;
+    public void setFollowing(boolean following) {
+        boolean wasFollowing = this.isFollowing;
+        this.isFollowing = following;
+        
+        // 从跟随状态释放时，继承实体的运动
+        if (wasFollowing && !following && !hasInitialBurst) {
+            // 给一个小的向上弹跳，然后受重力下落
+            this.vy = 0.05 + (RANDOM.nextDouble() * 0.03);
+            this.vx = (RANDOM.nextDouble() - 0.5) * 0.02;
+            this.vz = (RANDOM.nextDouble() - 0.5) * 0.02;
         }
     }
-    
-    public boolean isFrozen() {
-        return this.isFrozen;
+
+    public boolean isFollowing() {
+        return this.isFollowing;
+    }
+
+    public void setPosition(double x, double y, double z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        // 跟随模式下不更新 xo/yo/zo，让渲染插值更平滑
+        if (!isFollowing) {
+            this.xo = x;
+            this.yo = y;
+            this.zo = z;
+        }
     }
 
     @Override
@@ -135,22 +140,80 @@ public class DamageNumberParticle extends Particle {
     }
 
     @Override
-    public void render(@NotNull VertexConsumer buffer, @NotNull Camera camera, float partialTick) {
-        double renderX, renderY, renderZ;
+    public void tick() {
+        // 弹性缩放动画 - 弹簧物理
+        float scaleDiff = targetScale - currentScale;
+        scaleVelocity += scaleDiff * 0.4f;  // 弹簧力
+        scaleVelocity *= 0.65f;              // 阻尼
+        currentScale += scaleVelocity;
         
-        if (isFrozen && this.targetEntity != null && this.targetEntity.isAlive()) {
-            double entityX = Mth.lerp(partialTick, this.targetEntity.xo, this.targetEntity.getX());
-            double entityY = Mth.lerp(partialTick, this.targetEntity.yo, this.targetEntity.getY());
-            double entityZ = Mth.lerp(partialTick, this.targetEntity.zo, this.targetEntity.getZ());
-            
-            renderX = (entityX + this.offsetX) - camera.getPosition().x();
-            renderY = (entityY + this.offsetY) - camera.getPosition().y();
-            renderZ = (entityZ + this.offsetZ) - camera.getPosition().z();
-        } else {
-            renderX = Mth.lerp(partialTick, this.xo, this.x) - camera.getPosition().x();
-            renderY = Mth.lerp(partialTick, this.yo, this.y) - camera.getPosition().y();
-            renderZ = Mth.lerp(partialTick, this.zo, this.z) - camera.getPosition().z();
+        // 限制缩放范围
+        if (currentScale < 0) currentScale = 0;
+        if (currentScale > targetScale * 1.5f) {
+            currentScale = targetScale * 1.5f;
+            scaleVelocity *= -0.5f;  // 撞墙反弹
         }
+
+        // 保存上一帧位置（用于渲染插值）
+        this.xo = this.x;
+        this.yo = this.y;
+        this.zo = this.z;
+
+        if (this.isFollowing) {
+            // 跟随模式：位置由外部设置，物理暂停
+            // 但保留速度用于释放时的惯性
+        } else {
+            // 独立运动模式：完整的物理模拟
+            
+            // 计算加速度（阻力 + 重力）
+            // 阻力与速度方向相反，大小与速度成正比
+            ax = -vx * (1.0 - drag) * 2.0;  // 水平阻力
+            az = -vz * (1.0 - drag) * 2.0;
+            
+            // 垂直方向：重力 + 阻力
+            double verticalDrag = (vy > 0) ? drag * 0.98 : drag;  // 上升时阻力稍小
+            ay = -gravity - vy * (1.0 - verticalDrag) * 1.5;
+            
+            // 更新速度（欧拉积分）
+            vx += ax;
+            vy += ay;
+            vz += az;
+            
+            // 终端速度限制（避免过快）
+            double maxSpeed = 2.0;
+            vx = Mth.clamp(vx, -maxSpeed, maxSpeed);
+            vy = Mth.clamp(vy, -maxSpeed, maxSpeed);
+            vz = Mth.clamp(vz, -maxSpeed, maxSpeed);
+            
+            // 更新位置
+            x += vx;
+            y += vy;
+            z += vz;
+            
+            // 旋转减速
+            rotation += rotationVelocity;
+            rotationVelocity *= 0.95f;
+        }
+
+        this.age++;
+        if (this.age >= this.maxAge) {
+            this.remove();
+        }
+    }
+
+    @Override
+    public void render(@NotNull VertexConsumer buffer, @NotNull Camera camera, float partialTick) {
+        // 渲染时距离剔除（动态检查）
+        double distSqr = camera.getPosition().distanceToSqr(this.x, this.y, this.z);
+        ModConfigs  config = ModConfigs.get();
+        if (distSqr > config.physics.getMaxDisplayDistanceSqr()) {
+            return;
+        }
+
+        // 插值计算渲染位置
+        double renderX = Mth.lerp(partialTick, this.xo, this.x) - camera.getPosition().x();
+        double renderY = Mth.lerp(partialTick, this.yo, this.y) - camera.getPosition().y();
+        double renderZ = Mth.lerp(partialTick, this.zo, this.z) - camera.getPosition().z();
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.font == null) return;
@@ -158,29 +221,60 @@ public class DamageNumberParticle extends Particle {
         PoseStack poseStack = new PoseStack();
         poseStack.pushPose();
         
+        // 移动到世界位置
         poseStack.translate(renderX, renderY, renderZ);
-        poseStack.mulPose(camera.rotation());
         
-        float s = -0.025f * scale;
+        //  billboard 效果：朝向相机
+        poseStack.mulPose(Axis.YP.rotationDegrees(-camera.getYRot()));
+        poseStack.mulPose(Axis.XP.rotationDegrees(camera.getXRot()));
+        
+        // 应用旋转
+        if (Math.abs(rotation) > 0.1f) {
+            poseStack.mulPose(Axis.ZP.rotationDegrees(rotation));
+        }
+        
+        // 缩放
+        float s = -0.025f * this.currentScale;
         poseStack.scale(s, s, s);
 
+        // 计算透明度
         float alpha;
         if (this.age < this.startFadeAge) {
             alpha = 1.0f;
         } else {
-            alpha = 1.0f - ((float)this.age - this.startFadeAge) / (float)(this.lifetime - this.startFadeAge);
+            alpha = 1.0f - ((float)this.age - this.startFadeAge) / (float)(this.maxAge - this.startFadeAge);
         }
         alpha = Mth.clamp(alpha, 0.0f, 1.0f);
 
+        // 添加描边效果增强可读性
         int alphaInt = (int)(alpha * 255.0f) << 24;
-        int colorWithAlpha = alphaInt | this.baseColorRgb;
+        int colorWithAlpha = alphaInt | this.colorRgb;
+        
+        // 阴影/描边颜色（黑色，稍大）
+        int shadowColor = (alphaInt | 0x000000);
 
         MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
-        float width = mc.font.width(text);
+        float width = mc.font.width(this.text);
+        float xOffset = -width / 2.0f;
         
+        // 先画阴影（偏移一点）
         mc.font.drawInBatch(
-            text,
-            -width / 2.0f,
+            this.text,
+            xOffset + 1.0f,
+            1.0f,
+            shadowColor,
+            false,
+            poseStack.last().pose(),
+            bufferSource,
+            Font.DisplayMode.NORMAL,
+            0,
+            LightTexture.FULL_BRIGHT
+        );
+        
+        // 再画主文字
+        mc.font.drawInBatch(
+            this.text,
+            xOffset,
             0.0f,
             colorWithAlpha,
             false,
@@ -195,119 +289,7 @@ public class DamageNumberParticle extends Particle {
         poseStack.popPose();
     }
 
-    @Override
-    public void tick() {
-        if (isFrozen && (this.targetEntity == null || !this.targetEntity.isAlive())) {
-            unfreeze();
-        }
-        
-        if (this.targetEntity != null && this.targetEntity.isAlive() && this.isFrozen) {
-            this.x = this.targetEntity.getX() + this.offsetX;
-            this.y = this.targetEntity.getY() + this.offsetY;
-            this.z = this.targetEntity.getZ() + this.offsetZ;
-            
-            this.xo = this.x;
-            this.yo = this.y;
-            this.zo = this.z;
-        }
-
-        if (isFrozen) {
-            if (this.targetEntity == null) {
-                unfreeze();
-                return;
-            }
-            
-            this.x = this.targetEntity.getX() + this.offsetX;
-            this.y = this.targetEntity.getY() + this.offsetY;
-            this.z = this.targetEntity.getZ() + this.offsetZ;
-            
-            this.xo = this.x;
-            this.yo = this.y;
-            this.zo = this.z;
-            
-            this.age++;
-            if (this.age >= this.lifetime) {
-                this.remove();
-            }
-            return;
-        }
-        
-        this.xo = this.x;
-        this.yo = this.y;
-        this.zo = this.z;
-        
-        this.yd -= this.gravity; 
-        
-        this.xd *= this.drag;
-        this.zd *= this.drag;
-
-        this.move(this.xd, this.yd, this.zd);
-        
-        this.age++;
-        if (this.age >= this.lifetime) {
-            this.remove();
-        }
-    }
-
-
-    public void updateDamage(float newDamage, int newColorRgb, float newScale,
-                            float newGravity, float newInitialUpwardVel, 
-                            int newLifetime, float fadeRatio) {
-        this.text = (newDamage == (int) newDamage) ? String.valueOf((int) newDamage) 
-                                                : String.format("%.1f", newDamage);
-        this.baseColorRgb = newColorRgb & 0x00FFFFFF;
-        this.scale = newScale;
-        
-        this.gravity = newGravity;
-        this.initialUpwardVel = newInitialUpwardVel;
-        this.lifetime = newLifetime;
-        this.startFadeAge = (int)(newLifetime * fadeRatio);
-        
-       if (this.targetEntity != null) {
-        // 先获取实体当前位置
-        double entityX = this.targetEntity.getX();
-        double entityY = this.targetEntity.getY();
-        double entityZ = this.targetEntity.getZ();
-        
-        // 如果之前是 frozen，使用偏移；否则直接设置到实体头顶
-        if (this.isFrozen) {
-            this.x = entityX + this.offsetX;
-            this.y = entityY + this.offsetY;
-            this.z = entityZ + this.offsetZ;
-        } else {
-            this.x = entityX;
-            this.y = entityY + this.targetEntity.getBbHeight() * 1.1;
-            this.z = entityZ;
-        }
-        
-        // 重新计算偏移
-        this.offsetX = this.x - entityX;
-        this.offsetY = this.y - entityY;
-        this.offsetZ = this.z - entityZ;
-    }
-    
-    this.age = 0;
-    }
-
     public boolean isAlive() {
-        return !this.removed && this.age < this.lifetime;
-    }
-
-    @Override
-    public void remove() {
-        super.remove();
-        if (this.targetEntity != null && ACTIVE_PARTICLES.containsKey(this.targetEntity)) {
-            ACTIVE_PARTICLES.get(this.targetEntity).remove(this);
-        }
-    }
-
-    public static void removeParticlesForEntity(LivingEntity target) {
-        Set<DamageNumberParticle> particles = ACTIVE_PARTICLES.get(target);
-        if (particles != null) {
-            for (DamageNumberParticle p : particles.toArray(new DamageNumberParticle[0])) {
-                p.remove();
-            }
-            particles.clear();
-        }
+        return !this.removed && this.age < this.maxAge;
     }
 }

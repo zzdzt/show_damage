@@ -111,13 +111,10 @@ public class DamageNumberParticle extends Particle {
     public void unfreeze() {
         if (this.isFrozen) {
             if (this.targetEntity != null) {
-                if (this.targetEntity.isAlive()) {
-                    this.x = this.targetEntity.getX() + this.offsetX;
-                    this.y = this.targetEntity.getY() + this.offsetY;
-                    this.z = this.targetEntity.getZ() + this.offsetZ;
-                } else {
 
-                }
+                this.x = this.targetEntity.getX() + this.offsetX;
+                this.y = this.targetEntity.getY() + this.offsetY;
+                this.z = this.targetEntity.getZ() + this.offsetZ;
                 
                 this.xo = this.x;
                 this.yo = this.y;
@@ -139,24 +136,24 @@ public class DamageNumberParticle extends Particle {
 
     @Override
     public void render(@NotNull VertexConsumer buffer, @NotNull Camera camera, float partialTick) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.font == null) return;
-
         double renderX, renderY, renderZ;
         
         if (isFrozen && this.targetEntity != null && this.targetEntity.isAlive()) {
-            double currentX = this.targetEntity.getX() + this.offsetX;
-            double currentY = this.targetEntity.getY() + this.offsetY;
-            double currentZ = this.targetEntity.getZ() + this.offsetZ;
+            double entityX = Mth.lerp(partialTick, this.targetEntity.xo, this.targetEntity.getX());
+            double entityY = Mth.lerp(partialTick, this.targetEntity.yo, this.targetEntity.getY());
+            double entityZ = Mth.lerp(partialTick, this.targetEntity.zo, this.targetEntity.getZ());
             
-            renderX = currentX - camera.getPosition().x();
-            renderY = currentY - camera.getPosition().y();
-            renderZ = currentZ - camera.getPosition().z();
+            renderX = (entityX + this.offsetX) - camera.getPosition().x();
+            renderY = (entityY + this.offsetY) - camera.getPosition().y();
+            renderZ = (entityZ + this.offsetZ) - camera.getPosition().z();
         } else {
             renderX = Mth.lerp(partialTick, this.xo, this.x) - camera.getPosition().x();
             renderY = Mth.lerp(partialTick, this.yo, this.y) - camera.getPosition().y();
             renderZ = Mth.lerp(partialTick, this.zo, this.z) - camera.getPosition().z();
         }
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.font == null) return;
 
         PoseStack poseStack = new PoseStack();
         poseStack.pushPose();
@@ -201,8 +198,18 @@ public class DamageNumberParticle extends Particle {
     @Override
     public void tick() {
         if (isFrozen && (this.targetEntity == null || !this.targetEntity.isAlive())) {
-        unfreeze();
-    }
+            unfreeze();
+        }
+        
+        if (this.targetEntity != null && this.targetEntity.isAlive() && this.isFrozen) {
+            this.x = this.targetEntity.getX() + this.offsetX;
+            this.y = this.targetEntity.getY() + this.offsetY;
+            this.z = this.targetEntity.getZ() + this.offsetZ;
+            
+            this.xo = this.x;
+            this.yo = this.y;
+            this.zo = this.z;
+        }
 
         if (isFrozen) {
             if (this.targetEntity == null) {
@@ -247,7 +254,7 @@ public class DamageNumberParticle extends Particle {
                             float newGravity, float newInitialUpwardVel, 
                             int newLifetime, float fadeRatio) {
         this.text = (newDamage == (int) newDamage) ? String.valueOf((int) newDamage) 
-                                                   : String.format("%.1f", newDamage);
+                                                : String.format("%.1f", newDamage);
         this.baseColorRgb = newColorRgb & 0x00FFFFFF;
         this.scale = newScale;
         
@@ -256,20 +263,30 @@ public class DamageNumberParticle extends Particle {
         this.lifetime = newLifetime;
         this.startFadeAge = (int)(newLifetime * fadeRatio);
         
-        if (this.isFrozen && this.targetEntity != null && this.targetEntity.isAlive()) {
-            // 先更新粒子位置到实体当前位置（使用旧偏移）
-            this.x = this.targetEntity.getX() + this.offsetX;
-            this.y = this.targetEntity.getY() + this.offsetY;
-            this.z = this.targetEntity.getZ() + this.offsetZ;
-            
-            // 现在重新计算偏移（此时 this.x 和实体位置是同步的）
-            this.offsetX = this.x - this.targetEntity.getX();
-            this.offsetY = this.y - this.targetEntity.getY();
-            this.offsetZ = this.z - this.targetEntity.getZ();
+       if (this.targetEntity != null) {
+        // 先获取实体当前位置
+        double entityX = this.targetEntity.getX();
+        double entityY = this.targetEntity.getY();
+        double entityZ = this.targetEntity.getZ();
+        
+        // 如果之前是 frozen，使用偏移；否则直接设置到实体头顶
+        if (this.isFrozen) {
+            this.x = entityX + this.offsetX;
+            this.y = entityY + this.offsetY;
+            this.z = entityZ + this.offsetZ;
+        } else {
+            this.x = entityX;
+            this.y = entityY + this.targetEntity.getBbHeight() * 1.1;
+            this.z = entityZ;
         }
         
-        this.age = 0;
-        
+        // 重新计算偏移
+        this.offsetX = this.x - entityX;
+        this.offsetY = this.y - entityY;
+        this.offsetZ = this.z - entityZ;
+    }
+    
+    this.age = 0;
     }
 
     public boolean isAlive() {

@@ -39,7 +39,7 @@ public class ModConfigs implements ConfigData {
         @ConfigEntry.BoundedDiscrete(min = 10, max = 300) public int lifetimeTicks = 30;
         @ConfigEntry.BoundedDiscrete(min = 50, max = 95) public int fadeStartPercent = 80;
         
-        public boolean enableDamageMerge = true;
+        public boolean enableDamageMerge = false;
         @ConfigEntry.BoundedDiscrete(min = 100, max = 5000) public int mergeTimeoutMs = 1000;
 
         @ConfigEntry.Gui.Tooltip(count = 2)

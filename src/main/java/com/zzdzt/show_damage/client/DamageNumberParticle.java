@@ -17,37 +17,32 @@ import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
 public class DamageNumberParticle extends Particle {
     private static final Random RANDOM = new Random();
     
-    // 显示内容
     private String text;
     private int colorRgb;
     private float targetScale;
     private float currentScale;
     private float scaleVelocity;
     
-    // 生命周期
     private int maxAge;
     private int startFadeAge;
     
-    // 物理系统
     private double ax, ay, az;
     private double vx, vy, vz;
     private double gravity;
     private double drag;
     
-    // 状态
     private boolean isFollowing = false;
     private boolean hasInitialBurst = false;
     
-    // 渲染优化
     private float rotation;
     private float rotationVelocity;
     
-    // 渲染配置
     private final boolean shadowEnabled;
     private final float shadowOffsetX;
     private final float shadowOffsetY;
@@ -79,7 +74,6 @@ public class DamageNumberParticle extends Particle {
         this.drag = 0.92;
         this.hasPhysics = false;
         
-        // 保存渲染配置（新增）
         this.shadowEnabled = shadowEnabled;
         this.shadowOffsetX = shadowOffsetX;
         this.shadowOffsetY = shadowOffsetY;
@@ -166,7 +160,7 @@ public class DamageNumberParticle extends Particle {
         this.zo = this.z;
 
         if (this.isFollowing) {
-            // 跟随模式：位置由外部设置
+
         } else {
             ax = -vx * (1.0 - drag) * 2.0;
             az = -vz * (1.0 - drag) * 2.0;
@@ -201,7 +195,7 @@ public class DamageNumberParticle extends Particle {
     public void render(@NotNull VertexConsumer buffer, @NotNull Camera camera, float partialTick) {
         double distSqr = camera.getPosition().distanceToSqr(this.x, this.y, this.z);
         ModConfigs config = ModConfigs.get();
-        if (distSqr > config.physics.getMaxDisplayDistanceSqr()) {
+        if (distSqr > config.performance.getMaxDisplayDistanceSqr()) {
             return;
         }
 
@@ -211,6 +205,23 @@ public class DamageNumberParticle extends Particle {
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.font == null) return;
+
+        ModConfigs.RenderingConfig renderConfig = ModConfigs.get().rendering;
+
+        net.minecraft.network.chat.Style style = net.minecraft.network.chat.Style.EMPTY;
+        
+        // 如果启用了自定义字体，应用字体覆盖
+        if (renderConfig.useCustomFont && FontManager.INSTANCE.isUsingCustomFont()) {
+            style = style.withFont(FontManager.CUSTOM_FONT);
+        } else if (!renderConfig.useCustomFont) {
+            // 使用强制指定的字体
+            ResourceLocation forcedFont = new ResourceLocation(
+                renderConfig.forcedFontNamespace, 
+                renderConfig.forcedFontPath
+            );
+            style = style.withFont(forcedFont);
+        }
+            
 
         PoseStack poseStack = new PoseStack();
         poseStack.pushPose();
@@ -237,24 +248,24 @@ public class DamageNumberParticle extends Particle {
         float finalTextAlpha = alpha * this.textAlpha;
         float finalShadowAlpha = alpha * this.shadowAlpha;
 
-
         int textAlphaInt = (int)(finalTextAlpha * 255.0f) << 24;
         int shadowAlphaInt = (int)(finalShadowAlpha * 255.0f) << 24;
         int colorWithAlpha = textAlphaInt | this.colorRgb;
-
         
         MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
-        float width = mc.font.width(this.text);
+        net.minecraft.network.chat.Component textComponent = net.minecraft.network.chat.Component.literal(this.text).setStyle(style);
+
+        float width = mc.font.width(textComponent);
         float xOffset = -width / 2.0f;
         
         if (this.shadowEnabled) {
             int shadowColorWithAlpha = shadowAlphaInt | this.shadowColor;
             
             poseStack.pushPose();
-            poseStack.translate(0, 0, 0.001); // 阴影靠后
+            poseStack.translate(0, 0, 0.001); 
             
             mc.font.drawInBatch(
-                this.text,
+                textComponent,
                 xOffset + this.shadowOffsetX,
                 this.shadowOffsetY,
                 shadowColorWithAlpha,
@@ -269,9 +280,8 @@ public class DamageNumberParticle extends Particle {
             poseStack.popPose();
         }
         
-        // 主文字：Z 轴靠前（默认 0）
         mc.font.drawInBatch(
-            this.text,
+            textComponent,
             xOffset,
             0.0f,
             colorWithAlpha,

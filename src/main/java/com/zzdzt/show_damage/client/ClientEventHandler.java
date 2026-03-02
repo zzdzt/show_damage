@@ -119,7 +119,7 @@ public class ClientEventHandler {
         ModConfigs config = ModConfigs.get();
         if (!config.isEnabled) return;
         
-        double maxDistSqr = config.physics.getMaxDisplayDistanceSqr();
+        double maxDistSqr = config.performance.getMaxDisplayDistanceSqr();
         if (mc.player != null && mc.player.distanceToSqr(entity) > maxDistSqr) {
             return;
         }
@@ -136,6 +136,7 @@ public class ClientEventHandler {
         MergeSession session = mergeSessions.get(target);
         ModConfigs.PhysicsConfig p = config.physics;
         ModConfigs.RenderingConfig r = config.rendering;
+        ModConfigs.PerformanceConfig pf = config.performance;
         
         if (session != null && session.particle.isAlive()) {
             session.totalDamage += damage;
@@ -145,8 +146,8 @@ public class ClientEventHandler {
                 formatDamage(session.totalDamage),
                 calculateColor(session.totalDamage, config),
                 calculateScale(session.totalDamage, config),
-                p.getLifetime(),
-                p.getFadeStartRatio()
+                pf.getLifetime(),
+                pf.getFadeStartRatio()
             );
             
         } else {
@@ -159,8 +160,8 @@ public class ClientEventHandler {
                 formatDamage(damage),
                 calculateColor(damage, config),
                 calculateScale(damage, config),
-                p.getLifetime(),
-                p.getFadeStartRatio(),
+                pf.getLifetime(),
+                pf.getFadeStartRatio(),
                 p.getGravity(),
                 p.getInitialUpwardVelocity(),
                 p.getHorizontalSpreadFactor() * 2.0f,
@@ -204,6 +205,7 @@ public class ClientEventHandler {
     private static void spawnIndependentParticle(Minecraft mc, LivingEntity target, float damage, ModConfigs config) {
         ModConfigs.PhysicsConfig p = config.physics;
         ModConfigs.RenderingConfig r = config.rendering;
+        ModConfigs.PerformanceConfig pf = config.performance;
         
         Camera camera = mc.gameRenderer.getMainCamera();
         Vec3 pos = getDisplayPos(target, camera);
@@ -221,8 +223,8 @@ public class ClientEventHandler {
             formatDamage(damage),
             calculateColor(damage, config),
             calculateScale(damage, config),
-            p.getLifetime(),
-            p.getFadeStartRatio(),
+            pf.getLifetime(),
+            pf.getFadeStartRatio(),
             p.getGravity(),
             p.getInitialUpwardVelocity(),
             p.getHorizontalSpreadFactor() * 2.0f,

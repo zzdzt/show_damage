@@ -1,7 +1,14 @@
 package com.zzdzt.show_damage.client;
 
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Random;
+import java.util.WeakHashMap;
+
 import com.zzdzt.show_damage.config.ModConfigs;
 import com.zzdzt.show_damage.util.Color;
+
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.LivingEntity;
@@ -15,8 +22,6 @@ import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-import java.util.*;
-
 @OnlyIn(Dist.CLIENT)
 @Mod.EventBusSubscriber(modid = "show_damage", bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public class ClientEventHandler {
@@ -28,7 +33,7 @@ public class ClientEventHandler {
         DamageNumberParticle particle;
         float totalDamage;
         long lastHitTime;
-        Vec3 lastEntityPos;  // 记录上次位置用于计算速度
+        Vec3 lastEntityPos; 
     }
     
     private static final Map<LivingEntity, MergeSession> mergeSessions = new HashMap<>();
@@ -42,7 +47,6 @@ public class ClientEventHandler {
 
         LivingEntity entity = event.getEntity();
         
-        // 跳过玩家自己（第一人称不显示自己的伤害）
         if (entity instanceof Player player && mc.player != null 
                 && player.getUUID().equals(mc.player.getUUID())) {
             return;
@@ -61,7 +65,6 @@ public class ClientEventHandler {
             lastHealthMap.put(entity, currentHealth);
             processDamage(mc, entity, damage);
         } else if (currentHealth > lastHealth) {
-            // 治疗或回血，更新记录但不生成粒子
             lastHealthMap.put(entity, currentHealth);
         }
     }
@@ -91,7 +94,6 @@ public class ClientEventHandler {
                 session.particle.setFollowing(false);
                 
                 if (timeout && !dead && entity.isAlive()) {
-                    // 释放时也使用合并位置
                     Vec3 currentPos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera());
                     session.particle.setPosition(currentPos.x, currentPos.y, currentPos.z);
                 }
@@ -100,7 +102,6 @@ public class ClientEventHandler {
                 continue;
             }
             
-            // 更新跟随位置 - 使用合并专用的高位置
             Vec3 pos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera());
             session.particle.setPosition(pos.x, pos.y, pos.z);
             session.lastEntityPos = entity.position();
@@ -118,7 +119,6 @@ public class ClientEventHandler {
         ModConfigs config = ModConfigs.get();
         if (!config.isEnabled) return;
         
-        // 生成时距离检查
         double maxDistSqr = config.physics.getMaxDisplayDistanceSqr();
         if (mc.player != null && mc.player.distanceToSqr(entity) > maxDistSqr) {
             return;
@@ -135,13 +135,12 @@ public class ClientEventHandler {
         long now = System.currentTimeMillis();
         MergeSession session = mergeSessions.get(target);
         ModConfigs.PhysicsConfig p = config.physics;
+        ModConfigs.RenderingConfig r = config.rendering;
         
         if (session != null && session.particle.isAlive()) {
-            // 合并伤害
             session.totalDamage += damage;
             session.lastHitTime = now;
             
-            // 更新显示内容，触发弹跳动画
             session.particle.updateContent(
                 formatDamage(session.totalDamage),
                 calculateColor(session.totalDamage, config),
@@ -151,7 +150,6 @@ public class ClientEventHandler {
             );
             
         } else {
-            // 创建新的合并粒子
             Camera camera = mc.gameRenderer.getMainCamera();
             Vec3 pos = getMergeDisplayPos(target, camera);
             
@@ -166,7 +164,13 @@ public class ClientEventHandler {
                 p.getGravity(),
                 p.getInitialUpwardVelocity(),
                 p.getHorizontalSpreadFactor() * 2.0f,
-                false  // 合并模式不需要初始爆发
+                false,
+                r.isShadowEnabled(),
+                r.getShadowOffsetX(),
+                r.getShadowOffsetY(),
+                r.shadowColor,
+                r.getTextAlpha(),      
+                r.getShadowAlpha()  
             );
             
             particle.setFollowing(true);
@@ -184,28 +188,26 @@ public class ClientEventHandler {
     private static Vec3 getMergeDisplayPos(LivingEntity entity, Camera camera) {
         Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * 1.1, 0);
             
-            if (camera == null) {
-                return entityPos.add(0, 0.8, 0);
-            }
-            
-            Vec3 cameraPos = camera.getPosition();
-            double offsetDist = entity.getBbWidth() * 0.5;
-            
-            Vec3 toCamera = cameraPos.subtract(entityPos).normalize();
-            Vec3 offset = toCamera.scale(offsetDist);
-            
-            // 额外抬高 0.6 格，确保在头顶上方清晰可见
-            return entityPos.add(offset).add(0, 0.3, 0);
+        if (camera == null) {
+            return entityPos.add(0, 0.8, 0);
+        }
+        
+        Vec3 cameraPos = camera.getPosition();
+        double offsetDist = entity.getBbWidth() * 0.5;
+        
+        Vec3 toCamera = cameraPos.subtract(entityPos).normalize();
+        Vec3 offset = toCamera.scale(offsetDist);
+        
+        return entityPos.add(offset).add(0, 0.3, 0);
     }
 
     private static void spawnIndependentParticle(Minecraft mc, LivingEntity target, float damage, ModConfigs config) {
         ModConfigs.PhysicsConfig p = config.physics;
+        ModConfigs.RenderingConfig r = config.rendering;
         
-        // 使用相机偏移计算生成位置
         Camera camera = mc.gameRenderer.getMainCamera();
         Vec3 pos = getDisplayPos(target, camera);
         
-        // 添加一点随机偏移，避免多个数字完全重叠
         double spread = p.getHorizontalSpreadFactor();
         pos = pos.add(
             (RANDOM.nextDouble() - 0.5) * spread * 0.5,
@@ -224,32 +226,31 @@ public class ClientEventHandler {
             p.getGravity(),
             p.getInitialUpwardVelocity(),
             p.getHorizontalSpreadFactor() * 2.0f,
-            true  // 独立模式需要初始爆发
+            true,
+            r.isShadowEnabled(),
+            r.getShadowOffsetX(),
+            r.getShadowOffsetY(),
+            r.shadowColor,
+            r.getTextAlpha(),      
+            r.getShadowAlpha()
         );
         
         mc.particleEngine.add(particle);
     }
 
-    /**
-     * 计算显示位置 - 采用 ToroHealth 的相机偏移策略
-     */
     private static Vec3 getDisplayPos(LivingEntity entity, Camera camera) {
-        // 实体中心偏上位置
         Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * 0.8, 0);
         
         if (camera == null) {
             return entityPos.add(0, 0.5, 0);
         }
         
-        // 计算朝向相机的偏移
         Vec3 cameraPos = camera.getPosition();
         double offsetDist = entity.getBbWidth() * 0.6;
         
-        // 从实体指向相机的向量，归一化后乘以偏移距离
         Vec3 toCamera = cameraPos.subtract(entityPos).normalize();
         Vec3 offset = toCamera.scale(offsetDist);
         
-        // 在朝向相机的一侧生成，稍微偏上一点
         return entityPos.add(offset).add(0, 0.2, 0);
     }
 

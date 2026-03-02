@@ -32,6 +32,10 @@ public class ModConfigs implements ConfigData {
     @ConfigEntry.Gui.TransitiveObject
     public PhysicsConfig physics = new PhysicsConfig();
 
+    @ConfigEntry.Category("rendering")
+    @ConfigEntry.Gui.TransitiveObject
+    public RenderingConfig rendering = new RenderingConfig();
+
     public static class PhysicsConfig {
         @ConfigEntry.BoundedDiscrete(min = 0, max = 100) public int gravityValue = 15;
         @ConfigEntry.BoundedDiscrete(min = 0, max = 500) public int initialUpwardVelocity = 150;
@@ -59,6 +63,28 @@ public class ModConfigs implements ConfigData {
         }
     }
 
+    public static class RenderingConfig {
+        public boolean enableShadow = true;
+        @ConfigEntry.BoundedDiscrete(min = -50, max = 50) public int shadowOffsetX = 6;
+        @ConfigEntry.BoundedDiscrete(min = -50, max = 50) public int shadowOffsetY = 6;
+        public int shadowColor = 0x000000;
+
+        @ConfigEntry.BoundedDiscrete(min = 0, max = 100) public int textAlpha = 100;
+        @ConfigEntry.BoundedDiscrete(min = 0, max = 100) public int shadowAlpha = 60;
+
+        public boolean isShadowEnabled() { return enableShadow; }
+        public float getShadowOffsetX() { return shadowOffsetX / 10.0f; }
+        public float getShadowOffsetY() { return shadowOffsetY / 10.0f; }
+
+        public float getTextAlpha() { return textAlpha / 100.0f; }
+        public float getShadowAlpha() { return shadowAlpha / 100.0f; }
+        
+        public int getShadowColorWithAlpha(float alpha) {
+            int alphaInt = (int)(alpha * 255.0f) << 24;
+            return alphaInt | (shadowColor & 0x00FFFFFF);
+        }
+    }
+
     public static void register() { AutoConfig.register(ModConfigs.class, GsonConfigSerializer::new); }
     public static ModConfigs get() { return AutoConfig.getConfigHolder(ModConfigs.class).getConfig(); }
     public static void save() { AutoConfig.getConfigHolder(ModConfigs.class).save(); }
@@ -74,12 +100,10 @@ public class ModConfigs implements ConfigData {
         
         builder.setSavingRunnable(() -> save());
 
-
         ConfigEntryBuilder entryBuilder = builder.entryBuilder();
 
         // --- 通用设置 ---
         ConfigCategory general = builder.getOrCreateCategory(Component.translatable("show_damage.category.general"));
-
 
         general.addEntry(entryBuilder.startBooleanToggle(Component.translatable("show_damage.option.enabled"), current.isEnabled)
                 .setDefaultValue(defaults.isEnabled)
@@ -99,7 +123,6 @@ public class ModConfigs implements ConfigData {
                 .setTooltip(Component.translatable("show_damage.tooltip.mediumThreshold"))
                 .build());
 
- 
         general.addEntry(entryBuilder.startColorField(Component.translatable("show_damage.option.colorSmall"), current.colorSmall) 
                 .setDefaultValue(defaults.colorSmall)
                 .setSaveConsumer(colorInt -> current.colorSmall = colorInt) 
@@ -187,6 +210,47 @@ public class ModConfigs implements ConfigData {
                 .setDefaultValue(pDef.maxDisplayDistance)
                 .setSaveConsumer(value -> pCurr.maxDisplayDistance = value)
                 .setTooltip(Component.translatable("show_damage.tooltip.maxDistance"))
+                .build());
+
+        // --- 渲染设置 ---
+        ConfigCategory renderingCat = builder.getOrCreateCategory(Component.translatable("show_damage.category.rendering"));
+        ModConfigs.RenderingConfig rCurr = current.rendering;
+        ModConfigs.RenderingConfig rDef = defaults.rendering;
+
+        renderingCat.addEntry(entryBuilder.startIntSlider(Component.translatable("show_damage.  "), rCurr.textAlpha, 0, 100)
+                .setDefaultValue(rDef.textAlpha)
+                .setSaveConsumer(value -> rCurr.textAlpha = value)
+                .setTooltip(Component.translatable("show_damage.tooltip.textAlpha"))
+                .build());
+
+        renderingCat.addEntry(entryBuilder.startBooleanToggle(Component.translatable("show_damage.option.enableShadow"), rCurr.enableShadow)
+                .setDefaultValue(rDef.enableShadow)
+                .setSaveConsumer(value -> rCurr.enableShadow = value)
+                .setTooltip(Component.translatable("show_damage.tooltip.enableShadow"))
+                .build());
+
+        renderingCat.addEntry(entryBuilder.startIntSlider(Component.translatable("show_damage.option.shadowOffsetX"), rCurr.shadowOffsetX, -50, 50)
+                .setDefaultValue(rDef.shadowOffsetX)
+                .setSaveConsumer(value -> rCurr.shadowOffsetX = value)
+                .setTooltip(Component.translatable("show_damage.tooltip.shadowOffsetX"))
+                .build());
+
+        renderingCat.addEntry(entryBuilder.startIntSlider(Component.translatable("show_damage.option.shadowOffsetY"), rCurr.shadowOffsetY, -50, 50)
+                .setDefaultValue(rDef.shadowOffsetY)
+                .setSaveConsumer(value -> rCurr.shadowOffsetY = value)
+                .setTooltip(Component.translatable("show_damage.tooltip.shadowOffsetY"))
+                .build());
+
+        renderingCat.addEntry(entryBuilder.startColorField(Component.translatable("show_damage.option.shadowColor"), rCurr.shadowColor)
+                .setDefaultValue(rDef.shadowColor)
+                .setSaveConsumer(colorInt -> rCurr.shadowColor = colorInt)
+                .setTooltip(Component.translatable("show_damage.tooltip.shadowColor"))
+                .build());
+
+        renderingCat.addEntry(entryBuilder.startIntSlider(Component.translatable("show_damage.option.shadowAlpha"), rCurr.shadowAlpha, 0, 100)
+                .setDefaultValue(rDef.shadowAlpha)
+                .setSaveConsumer(value -> rCurr.shadowAlpha = value)
+                .setTooltip(Component.translatable("show_damage.tooltip.shadowAlpha"))
                 .build());
 
         return builder.build();

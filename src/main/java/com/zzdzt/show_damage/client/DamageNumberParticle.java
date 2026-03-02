@@ -1,5 +1,9 @@
 package com.zzdzt.show_damage.client;
 
+import java.util.Random;
+
+import org.jetbrains.annotations.NotNull;
+
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -14,10 +18,6 @@ import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.util.Mth;
-import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.NotNull;
-
-import java.util.Random;
 
 public class DamageNumberParticle extends Particle {
     private static final Random RANDOM = new Random();
@@ -27,17 +27,17 @@ public class DamageNumberParticle extends Particle {
     private int colorRgb;
     private float targetScale;
     private float currentScale;
-    private float scaleVelocity;  // 弹性缩放的速度
+    private float scaleVelocity;
     
     // 生命周期
     private int maxAge;
     private int startFadeAge;
     
-    // 物理系统 - 分离加速度、速度、位置
-    private double ax, ay, az;      // 加速度
-    private double vx, vy, vz;      // 速度
-    private double gravity;         // 重力加速度
-    private double drag;            // 空气阻力系数
+    // 物理系统
+    private double ax, ay, az;
+    private double vx, vy, vz;
+    private double gravity;
+    private double drag;
     
     // 状态
     private boolean isFollowing = false;
@@ -46,12 +46,23 @@ public class DamageNumberParticle extends Particle {
     // 渲染优化
     private float rotation;
     private float rotationVelocity;
+    
+    // 渲染配置
+    private final boolean shadowEnabled;
+    private final float shadowOffsetX;
+    private final float shadowOffsetY;
+    private final int shadowColor;
+    private final float textAlpha;    
+    private final float shadowAlpha;
 
     public DamageNumberParticle(ClientLevel level, double x, double y, double z,
                                 String text, int colorRgb, float scale, 
                                 int lifetime, float fadeRatio,
                                 double gravity, double initialUpwardVel, 
-                                double horizontalSpread, boolean shouldBurst) {
+                                double horizontalSpread, boolean shouldBurst,
+                                boolean shadowEnabled, float shadowOffsetX, 
+                                float shadowOffsetY, int shadowColor,
+                                float textAlpha, float shadowAlpha) {
         super(level, x, y, z);
         this.xo = x;
         this.yo = y;
@@ -65,19 +76,22 @@ public class DamageNumberParticle extends Particle {
         this.maxAge = lifetime;
         this.startFadeAge = (int)(lifetime * fadeRatio);
         this.gravity = gravity;
-        this.drag = 0.92;  // 空气阻力
+        this.drag = 0.92;
         this.hasPhysics = false;
         
-        // 初始化速度 - 使用正态分布让运动更自然
+        // 保存渲染配置（新增）
+        this.shadowEnabled = shadowEnabled;
+        this.shadowOffsetX = shadowOffsetX;
+        this.shadowOffsetY = shadowOffsetY;
+        this.shadowColor = shadowColor & 0x00FFFFFF;
+        this.textAlpha = Mth.clamp(textAlpha, 0.0f, 1.0f);      
+        this.shadowAlpha = Mth.clamp(shadowAlpha, 0.0f, 1.0f); 
+        
         if (shouldBurst) {
-            // 水平方向：正态分布随机，大部分集中在中间
             this.vx = RANDOM.nextGaussian() * horizontalSpread * 0.3;
             this.vz = RANDOM.nextGaussian() * horizontalSpread * 0.3;
-            // 垂直方向：明确的向上初速度 + 小随机
             this.vy = initialUpwardVel + (RANDOM.nextGaussian() * 0.02);
             this.hasInitialBurst = true;
-            
-            // 微小的旋转
             this.rotationVelocity = (float)(RANDOM.nextGaussian() * 2.0);
         } else {
             this.vx = 0;
@@ -87,7 +101,6 @@ public class DamageNumberParticle extends Particle {
         }
         this.rotation = 0;
         
-        // 初始化加速度
         this.ax = 0;
         this.ay = 0;
         this.az = 0;
@@ -101,7 +114,6 @@ public class DamageNumberParticle extends Particle {
         this.maxAge = newLifetime;
         this.startFadeAge = (int)(newLifetime * fadeRatio);
         this.age = 0;
-        // 更新时给一个"弹跳"效果
         this.scaleVelocity = (newScale - this.currentScale) * 0.5f;
     }
 
@@ -109,9 +121,7 @@ public class DamageNumberParticle extends Particle {
         boolean wasFollowing = this.isFollowing;
         this.isFollowing = following;
         
-        // 从跟随状态释放时，继承实体的运动
         if (wasFollowing && !following && !hasInitialBurst) {
-            // 给一个小的向上弹跳，然后受重力下落
             this.vy = 0.05 + (RANDOM.nextDouble() * 0.03);
             this.vx = (RANDOM.nextDouble() - 0.5) * 0.02;
             this.vz = (RANDOM.nextDouble() - 0.5) * 0.02;
@@ -126,7 +136,6 @@ public class DamageNumberParticle extends Particle {
         this.x = x;
         this.y = y;
         this.z = z;
-        // 跟随模式下不更新 xo/yo/zo，让渲染插值更平滑
         if (!isFollowing) {
             this.xo = x;
             this.yo = y;
@@ -141,56 +150,43 @@ public class DamageNumberParticle extends Particle {
 
     @Override
     public void tick() {
-        // 弹性缩放动画 - 弹簧物理
         float scaleDiff = targetScale - currentScale;
-        scaleVelocity += scaleDiff * 0.4f;  // 弹簧力
-        scaleVelocity *= 0.65f;              // 阻尼
+        scaleVelocity += scaleDiff * 0.4f;
+        scaleVelocity *= 0.65f;
         currentScale += scaleVelocity;
         
-        // 限制缩放范围
         if (currentScale < 0) currentScale = 0;
         if (currentScale > targetScale * 1.5f) {
             currentScale = targetScale * 1.5f;
-            scaleVelocity *= -0.5f;  // 撞墙反弹
+            scaleVelocity *= -0.5f;
         }
 
-        // 保存上一帧位置（用于渲染插值）
         this.xo = this.x;
         this.yo = this.y;
         this.zo = this.z;
 
         if (this.isFollowing) {
-            // 跟随模式：位置由外部设置，物理暂停
-            // 但保留速度用于释放时的惯性
+            // 跟随模式：位置由外部设置
         } else {
-            // 独立运动模式：完整的物理模拟
-            
-            // 计算加速度（阻力 + 重力）
-            // 阻力与速度方向相反，大小与速度成正比
-            ax = -vx * (1.0 - drag) * 2.0;  // 水平阻力
+            ax = -vx * (1.0 - drag) * 2.0;
             az = -vz * (1.0 - drag) * 2.0;
             
-            // 垂直方向：重力 + 阻力
-            double verticalDrag = (vy > 0) ? drag * 0.98 : drag;  // 上升时阻力稍小
+            double verticalDrag = (vy > 0) ? drag * 0.98 : drag;
             ay = -gravity - vy * (1.0 - verticalDrag) * 1.5;
             
-            // 更新速度（欧拉积分）
             vx += ax;
             vy += ay;
             vz += az;
             
-            // 终端速度限制（避免过快）
             double maxSpeed = 2.0;
             vx = Mth.clamp(vx, -maxSpeed, maxSpeed);
             vy = Mth.clamp(vy, -maxSpeed, maxSpeed);
             vz = Mth.clamp(vz, -maxSpeed, maxSpeed);
             
-            // 更新位置
             x += vx;
             y += vy;
             z += vz;
             
-            // 旋转减速
             rotation += rotationVelocity;
             rotationVelocity *= 0.95f;
         }
@@ -203,14 +199,12 @@ public class DamageNumberParticle extends Particle {
 
     @Override
     public void render(@NotNull VertexConsumer buffer, @NotNull Camera camera, float partialTick) {
-        // 渲染时距离剔除（动态检查）
         double distSqr = camera.getPosition().distanceToSqr(this.x, this.y, this.z);
-        ModConfigs  config = ModConfigs.get();
+        ModConfigs config = ModConfigs.get();
         if (distSqr > config.physics.getMaxDisplayDistanceSqr()) {
             return;
         }
 
-        // 插值计算渲染位置
         double renderX = Mth.lerp(partialTick, this.xo, this.x) - camera.getPosition().x();
         double renderY = Mth.lerp(partialTick, this.yo, this.y) - camera.getPosition().y();
         double renderZ = Mth.lerp(partialTick, this.zo, this.z) - camera.getPosition().z();
@@ -221,23 +215,17 @@ public class DamageNumberParticle extends Particle {
         PoseStack poseStack = new PoseStack();
         poseStack.pushPose();
         
-        // 移动到世界位置
         poseStack.translate(renderX, renderY, renderZ);
-        
-        //  billboard 效果：朝向相机
         poseStack.mulPose(Axis.YP.rotationDegrees(-camera.getYRot()));
         poseStack.mulPose(Axis.XP.rotationDegrees(camera.getXRot()));
         
-        // 应用旋转
         if (Math.abs(rotation) > 0.1f) {
             poseStack.mulPose(Axis.ZP.rotationDegrees(rotation));
         }
         
-        // 缩放
         float s = -0.025f * this.currentScale;
         poseStack.scale(s, s, s);
 
-        // 计算透明度
         float alpha;
         if (this.age < this.startFadeAge) {
             alpha = 1.0f;
@@ -246,32 +234,42 @@ public class DamageNumberParticle extends Particle {
         }
         alpha = Mth.clamp(alpha, 0.0f, 1.0f);
 
-        // 添加描边效果增强可读性
-        int alphaInt = (int)(alpha * 255.0f) << 24;
-        int colorWithAlpha = alphaInt | this.colorRgb;
-        
-        // 阴影/描边颜色（黑色，稍大）
-        int shadowColor = (alphaInt | 0x000000);
+        float finalTextAlpha = alpha * this.textAlpha;
+        float finalShadowAlpha = alpha * this.shadowAlpha;
 
+
+        int textAlphaInt = (int)(finalTextAlpha * 255.0f) << 24;
+        int shadowAlphaInt = (int)(finalShadowAlpha * 255.0f) << 24;
+        int colorWithAlpha = textAlphaInt | this.colorRgb;
+
+        
         MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
         float width = mc.font.width(this.text);
         float xOffset = -width / 2.0f;
         
-        // 先画阴影（偏移一点）
-        mc.font.drawInBatch(
-            this.text,
-            xOffset + 1.0f,
-            1.0f,
-            shadowColor,
-            false,
-            poseStack.last().pose(),
-            bufferSource,
-            Font.DisplayMode.NORMAL,
-            0,
-            LightTexture.FULL_BRIGHT
-        );
+        if (this.shadowEnabled) {
+            int shadowColorWithAlpha = shadowAlphaInt | this.shadowColor;
+            
+            poseStack.pushPose();
+            poseStack.translate(0, 0, 0.001); // 阴影靠后
+            
+            mc.font.drawInBatch(
+                this.text,
+                xOffset + this.shadowOffsetX,
+                this.shadowOffsetY,
+                shadowColorWithAlpha,
+                false,  
+                poseStack.last().pose(),
+                bufferSource,
+                Font.DisplayMode.SEE_THROUGH,
+                0,
+                LightTexture.FULL_BRIGHT
+            );
+            
+            poseStack.popPose();
+        }
         
-        // 再画主文字
+        // 主文字：Z 轴靠前（默认 0）
         mc.font.drawInBatch(
             this.text,
             xOffset,
@@ -280,7 +278,7 @@ public class DamageNumberParticle extends Particle {
             false,
             poseStack.last().pose(),
             bufferSource,
-            Font.DisplayMode.NORMAL,
+            Font.DisplayMode.SEE_THROUGH,
             0,
             LightTexture.FULL_BRIGHT
         );

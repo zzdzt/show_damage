@@ -23,6 +23,13 @@
   "show_damage.option.fadeStart": "开始淡出比例 (%)",
   "show_damage.option.maxDistance": "最大显示距离 (格)",
 
+  "show_damage.option.enableShadow":"启用文字阴影",
+  "show_damage.option.shadowOffsetX":"阴影横向偏移",
+  "show_damage.option.shadowOffsetY":"阴影纵向偏移",
+  "show_damage.option.shadowColor":"阴影颜色",
+  "show_damage.option.textAlpha": "主文字不透明度",
+  "show_damage.option.shadowAlpha": "阴影不透明度",
+
   "show_damage.tooltip.enabled": "开启或关闭伤害数字显示功能。",
   "show_damage.tooltip.smallThreshold": "低于此数值的伤害被视为小伤害。\n影响颜色和大小。",
   "show_damage.tooltip.mediumThreshold": "低于此数值但高于小伤害阈值的被视为中等伤害。\n影响颜色和大小。",
@@ -38,5 +45,13 @@
   "show_damage.tooltip.spread": "伤害数字左右随机分布的范围。\n数值越大，分布越散。",
   "show_damage.tooltip.lifetime": "伤害数字在屏幕上存在的总时长（单位：游戏刻）。\n20 刻 = 1 秒。",
   "show_damage.tooltip.fadeStart": "在生命周期进行到百分之多少时开始透明淡出。\n例如 80 表示最后 20% 的时间逐渐消失。",
-  "show_damage.tooltip.maxDistance": "超过此距离（单位：方块/格）的伤害将不显示数字。\n调小可提高性能，调大可看清远处伤害。\n默认 32 格。"
+  "show_damage.tooltip.maxDistance": "超过此距离（单位：方块/格）的伤害将不显示数字。\n调小可提高性能，调大可看清远处伤害。\n默认 32 格。",
+
+  "show_damage.tooltip.enableShadow":"为伤害数字添加阴影/描边效果",
+  "show_damage.tooltip.shadowOffsetX":"阴影相对于主文字的横向偏移量",
+  "show_damage.tooltip.shadowOffsetY":"阴影相对于主文字的纵向偏移量",
+  "show_damage.tooltip.shadowColor":"阴影颜色",
+
+  "show_damage.tooltip.textAlpha": "设置伤害数字主文字的不透明度（0-100）",
+  "show_damage.tooltip.shadowAlpha": "设置伤害数字阴影的不透明度（0-100）"
 }

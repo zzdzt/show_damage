@@ -21,6 +21,8 @@
   "show_damage.option.spread": "水平扩散系数",
   "show_damage.option.enableMerge": "启用伤害合并",
   "show_damage.option.mergeTimeout": "合并超时 (毫秒)",
+  "show_damage.option.mergeModeHeight": "合并模式数字高度",
+  "show_damage.option.independentModeHeight": "独立模式数字高度",
 
   "show_damage.option.lifetime": "持续时间 (刻)",
   "show_damage.option.fadeStart": "开始淡出 (%)",
@@ -34,6 +36,7 @@
   "show_damage.option.shadowColor": "阴影颜色",
   "show_damage.option.useCustomFont": "使用自定义字体",
   "show_damage.option.forcedFont": "强制字体路径",
+
 
   "show_damage.tooltip.enabled": "开启或关闭伤害数字显示功能。",
   "show_damage.tooltip.smallThreshold": "低于此数值的伤害被视为小伤害。\n影响颜色和大小。",
@@ -61,5 +64,9 @@
   "show_damage.tooltip.shadowColor": "阴影效果的颜色。",
   "show_damage.tooltip.useCustomFont": "允许资源包覆盖默认字体。\n资源包要求格式：assets/show_damage/font/damage_number.json",
   "show_damage.tooltip.forcedFont1": "禁用自定义字体时强制使用的字体。",
-  "show_damage.tooltip.forcedFont2": "格式：命名空间:路径（例如 minecraft:default）"
+  "show_damage.tooltip.forcedFont2": "格式：命名空间:路径（例如 minecraft:default）",
+  "show_damage.tooltip.mergeModeHeight1": "合并模式下数字显示在实体头顶的相对高度",
+  "show_damage.tooltip.mergeModeHeight2": "数值为实体高度的百分比（110 = 1.1倍高度）",
+  "show_damage.tooltip.independentModeHeight1": "独立模式下数字显示在实体头顶的相对高度",
+  "show_damage.tooltip.independentModeHeight2": "数值为实体高度的百分比（80 = 0.8倍高度）"
 }

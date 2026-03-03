@@ -1,6 +1,7 @@
 package com.zzdzt.show_damage;
 
 import com.zzdzt.show_damage.client.FontManager;
+import com.zzdzt.show_damage.config.ModConfigScreenFactory;
 import com.zzdzt.show_damage.config.ModConfigs;
 
 import net.minecraftforge.api.distmarker.Dist;
@@ -35,7 +36,7 @@ public class ShowDamageMod {
         ModLoadingContext.get().registerExtensionPoint(
             ConfigScreenHandler.ConfigScreenFactory.class,
             () -> new ConfigScreenHandler.ConfigScreenFactory(
-                (minecraft, parent) -> ModConfigs.createConfigScreen(parent)
+                (minecraft, parent) -> ModConfigScreenFactory.create(parent)
             )
         );
 

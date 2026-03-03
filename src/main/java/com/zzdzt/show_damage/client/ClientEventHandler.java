@@ -187,7 +187,9 @@ public class ClientEventHandler {
     }
 
     private static Vec3 getMergeDisplayPos(LivingEntity entity, Camera camera) {
-        Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * 1.1, 0);
+        ModConfigs config = ModConfigs.get();
+        double heightMultiplier = config.physics.getMergeHeightMultiplier();
+        Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * heightMultiplier, 0);
             
         if (camera == null) {
             return entityPos.add(0, 0.8, 0);
@@ -241,19 +243,21 @@ public class ClientEventHandler {
     }
 
     private static Vec3 getDisplayPos(LivingEntity entity, Camera camera) {
-        Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * 0.8, 0);
+        ModConfigs config = ModConfigs.get();
+        double heightMultiplier = config.physics.getIndependentHeightMultiplier();
+        Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * heightMultiplier, 0);
         
         if (camera == null) {
             return entityPos.add(0, 0.5, 0);
         }
         
         Vec3 cameraPos = camera.getPosition();
-        double offsetDist = entity.getBbWidth() * 0.6;
+        double offsetDist = entity.getBbWidth() * 1.0;
         
         Vec3 toCamera = cameraPos.subtract(entityPos).normalize();
         Vec3 offset = toCamera.scale(offsetDist);
         
-        return entityPos.add(offset).add(0, 0.2, 0);
+        return entityPos.add(offset).add(0, 0.5, 0);
     }
 
     private static String formatDamage(float damage) {

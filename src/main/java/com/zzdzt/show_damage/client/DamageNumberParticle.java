@@ -84,7 +84,7 @@ public class DamageNumberParticle extends Particle {
         if (shouldBurst) {
             this.vx = RANDOM.nextGaussian() * horizontalSpread * 0.3;
             this.vz = RANDOM.nextGaussian() * horizontalSpread * 0.3;
-            this.vy = initialUpwardVel + (RANDOM.nextGaussian() * 0.02);
+            this.vy = (initialUpwardVel * 1.5 ) + (RANDOM.nextGaussian() * 0.02);
             this.hasInitialBurst = true;
             this.rotationVelocity = (float)(RANDOM.nextGaussian() * 2.0);
         } else {

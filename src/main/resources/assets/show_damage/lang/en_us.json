@@ -61,5 +61,12 @@
   "show_damage.tooltip.shadowColor": "Color of the shadow effect.",
   "show_damage.tooltip.useCustomFont": "Allow resource packs to override the font.\nresource packs Format: assets/show_damage/font/damage_number.json",
   "show_damage.tooltip.forcedFont1": "Forced font when custom font is disabled.",
-  "show_damage.tooltip.forcedFont2": "Format: namespace:path (e.g., minecraft:default)"
+  "show_damage.tooltip.forcedFont2": "Format: namespace:path (e.g., minecraft:default)",
+  "show_damage.option.mergeModeHeight": "Merge Mode Numbers Height",
+  "show_damage.tooltip.mergeModeHeight1": "Relative height for merged damage numbers",
+  "show_damage.tooltip.mergeModeHeight2": "Percentage of entity height (110 = 1.1x height)",
+  
+  "show_damage.option.independentModeHeight": "Independent Mode Numbers Height",
+  "show_damage.tooltip.independentModeHeight1": "Relative height for independent damage numbers",
+  "show_damage.tooltip.independentModeHeight2": "Percentage of entity height (80 = 0.8x height)"
 }

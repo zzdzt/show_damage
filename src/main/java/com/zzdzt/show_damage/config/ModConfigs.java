@@ -30,6 +30,12 @@ public class ModConfigs implements ConfigData {
     @ConfigEntry.BoundedDiscrete(min = 5, max = 100) 
     public int scaleLarge = 25;
 
+    @ConfigEntry.Gui.Tooltip(count = 3)
+    public String mergeStyleId = "classic_merge";
+    
+    @ConfigEntry.Gui.Tooltip(count = 3)
+    public String independentStyleId = "classic_pop";
+
     @ConfigEntry.Category("physics")
     @ConfigEntry.Gui.TransitiveObject
     public PhysicsConfig physics = new PhysicsConfig();
@@ -41,6 +47,12 @@ public class ModConfigs implements ConfigData {
     @ConfigEntry.Category("rendering")
     @ConfigEntry.Gui.TransitiveObject
     public RenderingConfig rendering = new RenderingConfig();
+
+    @ConfigEntry.Category("display")
+    public DisplayConfig display = new DisplayConfig();
+
+    @ConfigEntry.Category("animation")
+    public AnimationConfig animation = new AnimationConfig();
 
     // ========== 嵌套配置类 ==========
     
@@ -146,4 +158,132 @@ public class ModConfigs implements ConfigData {
     public float getActualScaleSmall() { return scaleSmall / 10.0f; }
     public float getActualScaleMedium() { return scaleMedium / 10.0f; }
     public float getActualScaleLarge() { return scaleLarge / 10.0f; }
+
+    public String getMergeStyleId() { return mergeStyleId; }
+    public String getIndependentStyleId() { return independentStyleId; }
+
+    // ========== 数值显示配置 ==========
+    
+    public static class DisplayConfig {
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public boolean showDecimal = false;
+        
+        @ConfigEntry.BoundedDiscrete(min = 0, max = 2)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int decimalPlaces = 1;
+        
+        @ConfigEntry.Gui.Tooltip
+        public boolean useThousandsSeparator = false;
+        
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public boolean enableAbbreviation = false;
+        
+        @ConfigEntry.BoundedDiscrete(min = 1000, max = 100000)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int abbreviationThreshold = 10000;
+        
+        @ConfigEntry.Gui.Tooltip
+        public String customPrefix = "";
+        
+        @ConfigEntry.Gui.Tooltip
+        public String customSuffix = "";
+        
+        public String formatDamage(float damage) {
+            // 量级缩写
+            if (enableAbbreviation && damage >= abbreviationThreshold) {
+                return formatAbbreviated(damage);
+            }
+            
+            String formatted;
+            if (showDecimal) {
+                formatted = String.format("%." + decimalPlaces + "f", damage);
+            } else {
+                formatted = String.format("%.0f", damage);
+            }
+            if (useThousandsSeparator) {
+                formatted = addThousandsSeparator(formatted);
+            }
+            return formatted;
+        }
+        
+        private String formatAbbreviated(float damage) {
+            String suffix;
+            double value;
+            if (damage >= 1_000_000_000) {
+                suffix = "B";
+                value = damage / 1_000_000_000.0;
+            } else if (damage >= 1_000_000) {
+                suffix = "M";
+                value = damage / 1_000_000.0;
+            } else {
+                suffix = "K";
+                value = damage / 1_000.0;
+            }
+            
+            String formatted;
+            if (showDecimal && decimalPlaces > 0) {
+                formatted = String.format("%." + decimalPlaces + "f", value);
+            } else {
+                // 缩写模式下至少保留1位小数，除非是整数
+                if (value == (long) value) {
+                    formatted = String.format("%.0f", value);
+                } else {
+                    formatted = String.format("%.1f", value);
+                }
+            }
+            return formatted + suffix;
+        }
+        
+        private String addThousandsSeparator(String numStr) {
+            StringBuilder sb = new StringBuilder();
+            boolean hasDecimal = numStr.contains(".");
+            String intPart = hasDecimal ? numStr.split("\\.")[0] : numStr;
+            String decPart = hasDecimal ? "." + numStr.split("\\.")[1] : "";
+            
+            int len = intPart.length();
+            for (int i = 0; i < len; i++) {
+                if (i > 0 && (len - i) % 3 == 0) {
+                    sb.append(",");
+                }
+                sb.append(intPart.charAt(i));
+            }
+            sb.append(decPart);
+            return sb.toString();
+        }
+    }
+
+    // ========== 动画调整配置 ==========
+    
+    public static class AnimationConfig {
+        @ConfigEntry.BoundedDiscrete(min = 10, max = 90)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int scaleSmoothness = 40;
+        
+        @ConfigEntry.BoundedDiscrete(min = 50, max = 99)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int scaleDamping = 65;
+        
+        @ConfigEntry.BoundedDiscrete(min = 100, max = 300)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int maxOvershoot = 150;
+        
+        @ConfigEntry.BoundedDiscrete(min = 80, max = 99)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int drag = 92;
+        
+        @ConfigEntry.BoundedDiscrete(min = 50, max = 200)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int maxSpeed = 200;
+        
+        @ConfigEntry.BoundedDiscrete(min = 80, max = 99)
+        @ConfigEntry.Gui.Tooltip(count = 2)
+        public int rotationDamping = 95;
+        
+        public float getScaleAcceleration() { return scaleSmoothness / 100.0f; }
+        public float getScaleVelocityDecay() { return scaleDamping / 100.0f; }
+        public float getMaxOvershootMultiplier() { return maxOvershoot / 100.0f; }
+        public float getDrag() { return drag / 100.0f; }
+        public double getMaxSpeed() { return maxSpeed / 100.0; }
+        public float getRotationDamping() { return rotationDamping / 100.0f; }
+    }
 }

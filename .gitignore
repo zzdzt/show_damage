@@ -22,6 +22,7 @@ eclipse
 run
 .vscode
 .git
+.workbuddy
 
 # Files from Forge MDK
 forge*changelog.txt

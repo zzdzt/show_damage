@@ -1,5 +1,8 @@
 package com.zzdzt.show_damage.config;
 
+import com.zzdzt.show_damage.client.style.IndependentStyle;
+import com.zzdzt.show_damage.client.style.MergeStyle;
+import com.zzdzt.show_damage.client.style.StyleRegistry;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
@@ -8,12 +11,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
 @OnlyIn(Dist.CLIENT)
 public class ModConfigScreenFactory {
 
-    /**
-     * 创建配置界面入口
-     */
     public static Screen create(Screen parent) {
         ModConfigs defaults = new ModConfigs();
         ModConfigs current = ModConfigs.get();
@@ -23,349 +27,350 @@ public class ModConfigScreenFactory {
                 .setTitle(Component.translatable("show_damage.config.title"))
                 .setSavingRunnable(ModConfigs::save);
 
-        ConfigEntryBuilder entryBuilder = builder.entryBuilder();
+        ConfigEntryBuilder eb = builder.entryBuilder();
 
-        // 添加各个分类
-        addGeneralCategory(builder, entryBuilder, current, defaults);
-        addPhysicsCategory(builder, entryBuilder, current, defaults);
-        addPerformanceCategory(builder, entryBuilder, current, defaults);
-        addRenderingCategory(builder, entryBuilder, current, defaults);
+        addGeneral(builder, eb, current, defaults);
+        addPhysics(builder, eb, current, defaults);
+        addPerformance(builder, eb, current, defaults);
+        addRendering(builder, eb, current, defaults);
+        addDisplay(builder, eb, current, defaults);
+        addAnimation(builder, eb, current, defaults);
+        addStyle(builder, eb, current, defaults);
 
         return builder.build();
     }
 
     // ========== 通用设置 ==========
 
-    private static void addGeneralCategory(ConfigBuilder builder, 
-                                          ConfigEntryBuilder entryBuilder,
-                                          ModConfigs current, 
-                                          ModConfigs defaults) {
-        ConfigCategory category = builder.getOrCreateCategory(
-            Component.translatable("show_damage.category.general")
-        );
+    private static void addGeneral(ConfigBuilder builder, ConfigEntryBuilder eb,
+                                   ModConfigs c, ModConfigs d) {
+        ConfigCategory cat = builder.getOrCreateCategory(t("show_damage.category.general"));
 
-        category.addEntry(entryBuilder
-            .startBooleanToggle(
-                Component.translatable("show_damage.option.enabled"), 
-                current.isEnabled)
-            .setDefaultValue(defaults.isEnabled)
-            .setSaveConsumer(value -> current.isEnabled = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.enabled"))
-            .build());
+        addBool(cat, eb, "show_damage.option.enabled",
+                c.isEnabled, d.isEnabled, v -> c.isEnabled = v,
+                "show_damage.tooltip.enabled");
 
-        category.addEntry(entryBuilder
-            .startBooleanToggle(
-                Component.translatable("show_damage.option.enableMerge"), 
-                current.physics.enableDamageMerge)
-            .setDefaultValue(defaults.physics.enableDamageMerge)
-            .setSaveConsumer(value -> current.physics.enableDamageMerge = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.enableMerge"))
-            .build());
+        addBool(cat, eb, "show_damage.option.enableMerge",
+                c.physics.enableDamageMerge, d.physics.enableDamageMerge, v -> c.physics.enableDamageMerge = v,
+                "show_damage.tooltip.enableMerge");
 
-        category.addEntry(entryBuilder
-            .startFloatField(
-                Component.translatable("show_damage.option.smallThreshold"), 
-                current.smallDamageThreshold)
-            .setDefaultValue(defaults.smallDamageThreshold)
-            .setSaveConsumer(value -> current.smallDamageThreshold = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.smallThreshold"))
-            .build());
+        addFloat(cat, eb, "show_damage.option.smallThreshold",
+                c.smallDamageThreshold, d.smallDamageThreshold, v -> c.smallDamageThreshold = v,
+                "show_damage.tooltip.smallThreshold");
 
-        category.addEntry(entryBuilder
-            .startFloatField(
-                Component.translatable("show_damage.option.mediumThreshold"), 
-                current.mediumDamageThreshold)
-            .setDefaultValue(defaults.mediumDamageThreshold)
-            .setSaveConsumer(value -> current.mediumDamageThreshold = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.mediumThreshold"))
-            .build());
+        addFloat(cat, eb, "show_damage.option.mediumThreshold",
+                c.mediumDamageThreshold, d.mediumDamageThreshold, v -> c.mediumDamageThreshold = v,
+                "show_damage.tooltip.mediumThreshold");
 
-        // 颜色设置
-        addColorEntries(category, entryBuilder, current, defaults);
-        
-        // 缩放设置
-        addScaleEntries(category, entryBuilder, current, defaults);
-    }
+        addColor(cat, eb, "show_damage.option.colorSmall",
+                c.colorSmall, d.colorSmall, v -> c.colorSmall = v,
+                "show_damage.tooltip.colorFormat");
 
-    private static void addColorEntries(ConfigCategory category,
-                                       ConfigEntryBuilder entryBuilder,
-                                       ModConfigs current,
-                                       ModConfigs defaults) {
-        category.addEntry(entryBuilder
-            .startColorField(
-                Component.translatable("show_damage.option.colorSmall"), 
-                current.colorSmall)
-            .setDefaultValue(defaults.colorSmall)
-            .setSaveConsumer(color -> current.colorSmall = color)
-            .setTooltip(Component.translatable("show_damage.tooltip.colorFormat"))
-            .build());
+        addColor(cat, eb, "show_damage.option.colorMedium",
+                c.colorMedium, d.colorMedium, v -> c.colorMedium = v,
+                "show_damage.tooltip.colorFormat");
 
-        category.addEntry(entryBuilder
-            .startColorField(
-                Component.translatable("show_damage.option.colorMedium"), 
-                current.colorMedium)
-            .setDefaultValue(defaults.colorMedium)
-            .setSaveConsumer(color -> current.colorMedium = color)
-            .setTooltip(Component.translatable("show_damage.tooltip.colorFormat"))
-            .build());
+        addColor(cat, eb, "show_damage.option.colorLarge",
+                c.colorLarge, d.colorLarge, v -> c.colorLarge = v,
+                "show_damage.tooltip.colorFormat");
 
-        category.addEntry(entryBuilder
-            .startColorField(
-                Component.translatable("show_damage.option.colorLarge"), 
-                current.colorLarge)
-            .setDefaultValue(defaults.colorLarge)
-            .setSaveConsumer(color -> current.colorLarge = color)
-            .setTooltip(Component.translatable("show_damage.tooltip.colorFormat"))
-            .build());
-    }
+        addIntSlider(cat, eb, "show_damage.option.scaleSmall",
+                c.scaleSmall, d.scaleSmall, 5, 100, v -> c.scaleSmall = v,
+                "show_damage.tooltip.scaleSmall");
 
-    private static void addScaleEntries(ConfigCategory category,
-                                       ConfigEntryBuilder entryBuilder,
-                                       ModConfigs current,
-                                       ModConfigs defaults) {
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.scaleSmall"), 
-                current.scaleSmall, 5, 100)
-            .setDefaultValue(defaults.scaleSmall)
-            .setSaveConsumer(value -> current.scaleSmall = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.scaleSmall"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.scaleMedium",
+                c.scaleMedium, d.scaleMedium, 5, 100, v -> c.scaleMedium = v,
+                "show_damage.tooltip.scaleMedium");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.scaleMedium"), 
-                current.scaleMedium, 5, 100)
-            .setDefaultValue(defaults.scaleMedium)
-            .setSaveConsumer(value -> current.scaleMedium = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.scaleMedium"))
-            .build());
-
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.scaleLarge"), 
-                current.scaleLarge, 5, 100)
-            .setDefaultValue(defaults.scaleLarge)
-            .setSaveConsumer(value -> current.scaleLarge = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.scaleLarge"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.scaleLarge",
+                c.scaleLarge, d.scaleLarge, 5, 100, v -> c.scaleLarge = v,
+                "show_damage.tooltip.scaleLarge");
     }
 
     // ========== 物理效果 ==========
 
-    private static void addPhysicsCategory(ConfigBuilder builder,
-                                          ConfigEntryBuilder entryBuilder,
-                                          ModConfigs current,
-                                          ModConfigs defaults) {
-        ConfigCategory category = builder.getOrCreateCategory(
-            Component.translatable("show_damage.category.physics")
-        );
+    private static void addPhysics(ConfigBuilder builder, ConfigEntryBuilder eb,
+                                   ModConfigs c, ModConfigs d) {
+        ConfigCategory cat = builder.getOrCreateCategory(t("show_damage.category.physics"));
+        ModConfigs.PhysicsConfig p = c.physics, dp = d.physics;
 
-        ModConfigs.PhysicsConfig pCurr = current.physics;
-        ModConfigs.PhysicsConfig pDef = defaults.physics;
+        addIntSlider(cat, eb, "show_damage.option.gravity",
+                p.gravityValue, dp.gravityValue, 0, 100, v -> p.gravityValue = v,
+                "show_damage.tooltip.gravity");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.gravity"), 
-                pCurr.gravityValue, 0, 100)
-            .setDefaultValue(pDef.gravityValue)
-            .setSaveConsumer(value -> pCurr.gravityValue = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.gravity"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.upwardVelocity",
+                p.initialUpwardVelocity, dp.initialUpwardVelocity, 0, 500, v -> p.initialUpwardVelocity = v,
+                "show_damage.tooltip.upwardVelocity");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.upwardVelocity"), 
-                pCurr.initialUpwardVelocity, 0, 500)
-            .setDefaultValue(pDef.initialUpwardVelocity)
-            .setSaveConsumer(value -> pCurr.initialUpwardVelocity = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.upwardVelocity"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.spread",
+                p.horizontalSpread, dp.horizontalSpread, 0, 600, v -> p.horizontalSpread = v,
+                "show_damage.tooltip.spread");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.spread"), 
-                pCurr.horizontalSpread, 0, 600)
-            .setDefaultValue(pDef.horizontalSpread)
-            .setSaveConsumer(value -> pCurr.horizontalSpread = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.spread"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.mergeModeHeight",
+                p.mergeModeHeightOffset, dp.mergeModeHeightOffset, 0, 300, v -> p.mergeModeHeightOffset = v,
+                "show_damage.tooltip.mergeModeHeight");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.mergeModeHeight"), 
-                pCurr.mergeModeHeightOffset, 0, 300)
-            .setDefaultValue(pDef.mergeModeHeightOffset)
-            .setSaveConsumer(value -> pCurr.mergeModeHeightOffset = value)
-            .setTooltip(
-                Component.translatable("show_damage.tooltip.mergeModeHeight")
-            )
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.independentModeHeight",
+                p.independentModeHeightOffset, dp.independentModeHeightOffset, 0, 300, v -> p.independentModeHeightOffset = v,
+                "show_damage.tooltip.independentModeHeight");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.independentModeHeight"), 
-                pCurr.independentModeHeightOffset, 0, 300)
-            .setDefaultValue(pDef.independentModeHeightOffset)
-            .setSaveConsumer(value -> pCurr.independentModeHeightOffset = value)
-            .setTooltip(
-                Component.translatable("show_damage.tooltip.independentModeHeight")
-            )
-            .build());
-
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.mergeTimeout"), 
-                pCurr.mergeTimeoutMs, 100, 5000)
-            .setDefaultValue(pDef.mergeTimeoutMs)
-            .setSaveConsumer(value -> pCurr.mergeTimeoutMs = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.mergeTimeout"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.mergeTimeout",
+                p.mergeTimeoutMs, dp.mergeTimeoutMs, 100, 5000, v -> p.mergeTimeoutMs = v,
+                "show_damage.tooltip.mergeTimeout");
     }
 
     // ========== 性能设置 ==========
 
-    private static void addPerformanceCategory(ConfigBuilder builder,
-                                              ConfigEntryBuilder entryBuilder,
-                                              ModConfigs current,
-                                              ModConfigs defaults) {
-        ConfigCategory category = builder.getOrCreateCategory(
-            Component.translatable("show_damage.category.performance")
-        );
+    private static void addPerformance(ConfigBuilder builder, ConfigEntryBuilder eb,
+                                       ModConfigs c, ModConfigs d) {
+        ConfigCategory cat = builder.getOrCreateCategory(t("show_damage.category.performance"));
+        ModConfigs.PerformanceConfig pf = c.performance, dpf = d.performance;
 
-        ModConfigs.PerformanceConfig perfCurr = current.performance;
-        ModConfigs.PerformanceConfig perfDef = defaults.performance;
+        addIntSlider(cat, eb, "show_damage.option.lifetime",
+                pf.lifetimeTicks, dpf.lifetimeTicks, 10, 300, v -> pf.lifetimeTicks = v,
+                "show_damage.tooltip.lifetime");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.lifetime"), 
-                perfCurr.lifetimeTicks, 10, 300)
-            .setDefaultValue(perfDef.lifetimeTicks)
-            .setSaveConsumer(value -> perfCurr.lifetimeTicks = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.lifetime"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.fadeStart",
+                pf.fadeStartPercent, dpf.fadeStartPercent, 50, 95, v -> pf.fadeStartPercent = v,
+                "show_damage.tooltip.fadeStart");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.fadeStart"), 
-                perfCurr.fadeStartPercent, 50, 95)
-            .setDefaultValue(perfDef.fadeStartPercent)
-            .setSaveConsumer(value -> perfCurr.fadeStartPercent = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.fadeStart"))
-            .build());
-
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.maxDistance"), 
-                perfCurr.maxDisplayDistance, 4, 128)
-            .setDefaultValue(perfDef.maxDisplayDistance)
-            .setSaveConsumer(value -> perfCurr.maxDisplayDistance = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.maxDistance"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.maxDistance",
+                pf.maxDisplayDistance, dpf.maxDisplayDistance, 4, 128, v -> pf.maxDisplayDistance = v,
+                "show_damage.tooltip.maxDistance");
     }
 
     // ========== 渲染设置 ==========
 
-    private static void addRenderingCategory(ConfigBuilder builder,
-                                            ConfigEntryBuilder entryBuilder,
-                                            ModConfigs current,
-                                            ModConfigs defaults) {
-        ConfigCategory category = builder.getOrCreateCategory(
-            Component.translatable("show_damage.category.rendering")
-        );
+    private static void addRendering(ConfigBuilder builder, ConfigEntryBuilder eb,
+                                      ModConfigs c, ModConfigs d) {
+        ConfigCategory cat = builder.getOrCreateCategory(t("show_damage.category.rendering"));
+        ModConfigs.RenderingConfig r = c.rendering, dr = d.rendering;
 
-        ModConfigs.RenderingConfig rCurr = current.rendering;
-        ModConfigs.RenderingConfig rDef = defaults.rendering;
+        addIntSlider(cat, eb, "show_damage.option.textAlpha",
+                r.textAlpha, dr.textAlpha, 0, 100, v -> r.textAlpha = v,
+                "show_damage.tooltip.textAlpha");
 
-        // 透明度
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.textAlpha"), 
-                rCurr.textAlpha, 0, 100)
-            .setDefaultValue(rDef.textAlpha)
-            .setSaveConsumer(value -> rCurr.textAlpha = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.textAlpha"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.shadowAlpha",
+                r.shadowAlpha, dr.shadowAlpha, 0, 100, v -> r.shadowAlpha = v,
+                "show_damage.tooltip.shadowAlpha");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.shadowAlpha"), 
-                rCurr.shadowAlpha, 0, 100)
-            .setDefaultValue(rDef.shadowAlpha)
-            .setSaveConsumer(value -> rCurr.shadowAlpha = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.shadowAlpha"))
-            .build());
+        addBool(cat, eb, "show_damage.option.enableShadow",
+                r.enableShadow, dr.enableShadow, v -> r.enableShadow = v,
+                "show_damage.tooltip.enableShadow");
 
-        // 阴影开关和偏移
-        category.addEntry(entryBuilder
-            .startBooleanToggle(
-                Component.translatable("show_damage.option.enableShadow"), 
-                rCurr.enableShadow)
-            .setDefaultValue(rDef.enableShadow)
-            .setSaveConsumer(value -> rCurr.enableShadow = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.enableShadow"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.shadowOffsetX",
+                r.shadowOffsetX, dr.shadowOffsetX, -50, 50, v -> r.shadowOffsetX = v,
+                "show_damage.tooltip.shadowOffsetX");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.shadowOffsetX"), 
-                rCurr.shadowOffsetX, -50, 50)
-            .setDefaultValue(rDef.shadowOffsetX)
-            .setSaveConsumer(value -> rCurr.shadowOffsetX = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.shadowOffsetX"))
-            .build());
+        addIntSlider(cat, eb, "show_damage.option.shadowOffsetY",
+                r.shadowOffsetY, dr.shadowOffsetY, -50, 50, v -> r.shadowOffsetY = v,
+                "show_damage.tooltip.shadowOffsetY");
 
-        category.addEntry(entryBuilder
-            .startIntSlider(
-                Component.translatable("show_damage.option.shadowOffsetY"), 
-                rCurr.shadowOffsetY, -50, 50)
-            .setDefaultValue(rDef.shadowOffsetY)
-            .setSaveConsumer(value -> rCurr.shadowOffsetY = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.shadowOffsetY"))
-            .build());
+        addColor(cat, eb, "show_damage.option.shadowColor",
+                r.shadowColor, dr.shadowColor, v -> r.shadowColor = v,
+                "show_damage.tooltip.shadowColor");
 
-        category.addEntry(entryBuilder
-            .startColorField(
-                Component.translatable("show_damage.option.shadowColor"), 
-                rCurr.shadowColor)
-            .setDefaultValue(rDef.shadowColor)
-            .setSaveConsumer(color -> rCurr.shadowColor = color)
-            .setTooltip(Component.translatable("show_damage.tooltip.shadowColor"))
-            .build());
+        addBool(cat, eb, "show_damage.option.useCustomFont",
+                r.useCustomFont, dr.useCustomFont, v -> r.useCustomFont = v,
+                "show_damage.tooltip.useCustomFont");
 
-        // 字体设置
-        addFontEntries(category, entryBuilder, rCurr, rDef);
+        // 字体路径解析需要特殊处理
+        cat.addEntry(eb
+                .startStrField(t("show_damage.option.forcedFont"),
+                        r.forcedFontNamespace + ":" + r.forcedFontPath)
+                .setDefaultValue("minecraft:default")
+                .setSaveConsumer(value -> {
+                    String[] parts = value.split(":", 2);
+                    if (parts.length == 2) {
+                        r.forcedFontNamespace = parts[0];
+                        r.forcedFontPath = parts[1];
+                    }
+                })
+                .setTooltip(
+                        t("show_damage.tooltip.forcedFont1"),
+                        t("show_damage.tooltip.forcedFont2"))
+                .build());
     }
 
-    private static void addFontEntries(ConfigCategory category,
-                                      ConfigEntryBuilder entryBuilder,
-                                      ModConfigs.RenderingConfig current,
-                                      ModConfigs.RenderingConfig defaults) {
-        category.addEntry(entryBuilder
-            .startBooleanToggle(
-                Component.translatable("show_damage.option.useCustomFont"), 
-                current.useCustomFont)
-            .setDefaultValue(defaults.useCustomFont)
-            .setSaveConsumer(value -> current.useCustomFont = value)
-            .setTooltip(Component.translatable("show_damage.tooltip.useCustomFont"))
-            .build());
+    // ========== 数值显示 ==========
 
-        category.addEntry(entryBuilder
-            .startStrField(
-                Component.translatable("show_damage.option.forcedFont"), 
-                current.forcedFontNamespace + ":" + current.forcedFontPath)
-            .setDefaultValue("minecraft:default")
-            .setSaveConsumer(value -> {
-                String[] parts = value.split(":", 2);
-                if (parts.length == 2) {
-                    current.forcedFontNamespace = parts[0];
-                    current.forcedFontPath = parts[1];
-                }
-            })
-            .setTooltip(
-                Component.translatable("show_damage.tooltip.forcedFont1"),
-                Component.translatable("show_damage.tooltip.forcedFont2")
-            )
-            .build());
+    private static void addDisplay(ConfigBuilder builder, ConfigEntryBuilder eb,
+                                   ModConfigs c, ModConfigs d) {
+        ConfigCategory cat = builder.getOrCreateCategory(t("show_damage.category.display"));
+        ModConfigs.DisplayConfig dc = c.display, dd = d.display;
+
+        addBool(cat, eb, "show_damage.option.showDecimal",
+                dc.showDecimal, dd.showDecimal, v -> dc.showDecimal = v,
+                "show_damage.tooltip.showDecimal.1", "show_damage.tooltip.showDecimal.2");
+
+        addIntSlider(cat, eb, "show_damage.option.decimalPlaces",
+                dc.decimalPlaces, dd.decimalPlaces, 0, 2, v -> dc.decimalPlaces = v,
+                "show_damage.tooltip.decimalPlaces.1", "show_damage.tooltip.decimalPlaces.2");
+
+        addBool(cat, eb, "show_damage.option.useThousandsSeparator",
+                dc.useThousandsSeparator, dd.useThousandsSeparator, v -> dc.useThousandsSeparator = v,
+                "show_damage.tooltip.useThousandsSeparator");
+
+        addBool(cat, eb, "show_damage.option.enableAbbreviation",
+                dc.enableAbbreviation, dd.enableAbbreviation, v -> dc.enableAbbreviation = v,
+                "show_damage.tooltip.enableAbbreviation.1", "show_damage.tooltip.enableAbbreviation.2");
+
+        addIntSlider(cat, eb, "show_damage.option.abbreviationThreshold",
+                dc.abbreviationThreshold, dd.abbreviationThreshold, 1000, 100000, v -> dc.abbreviationThreshold = v,
+                "show_damage.tooltip.abbreviationThreshold.1", "show_damage.tooltip.abbreviationThreshold.2");
+
+        addStr(cat, eb, "show_damage.option.customPrefix",
+                dc.customPrefix, dd.customPrefix, v -> dc.customPrefix = v,
+                "show_damage.tooltip.customPrefix");
+
+        addStr(cat, eb, "show_damage.option.customSuffix",
+                dc.customSuffix, dd.customSuffix, v -> dc.customSuffix = v,
+                "show_damage.tooltip.customSuffix");
+    }
+
+    // ========== 动画调整 ==========
+
+    private static void addAnimation(ConfigBuilder builder, ConfigEntryBuilder eb,
+                                     ModConfigs c, ModConfigs d) {
+        ConfigCategory cat = builder.getOrCreateCategory(t("show_damage.category.animation"));
+        ModConfigs.AnimationConfig a = c.animation, da = d.animation;
+
+        addIntSlider(cat, eb, "show_damage.option.scaleSmoothness",
+                a.scaleSmoothness, da.scaleSmoothness, 10, 90, v -> a.scaleSmoothness = v,
+                "show_damage.tooltip.scaleSmoothness.1", "show_damage.tooltip.scaleSmoothness.2");
+
+        addIntSlider(cat, eb, "show_damage.option.scaleDamping",
+                a.scaleDamping, da.scaleDamping, 50, 99, v -> a.scaleDamping = v,
+                "show_damage.tooltip.scaleDamping.1", "show_damage.tooltip.scaleDamping.2");
+
+        addIntSlider(cat, eb, "show_damage.option.maxOvershoot",
+                a.maxOvershoot, da.maxOvershoot, 100, 300, v -> a.maxOvershoot = v,
+                "show_damage.tooltip.maxOvershoot");
+
+        addIntSlider(cat, eb, "show_damage.option.drag",
+                a.drag, da.drag, 80, 99, v -> a.drag = v,
+                "show_damage.tooltip.drag.1", "show_damage.tooltip.drag.2");
+
+        addIntSlider(cat, eb, "show_damage.option.maxSpeed",
+                a.maxSpeed, da.maxSpeed, 50, 200, v -> a.maxSpeed = v,
+                "show_damage.tooltip.maxSpeed.1", "show_damage.tooltip.maxSpeed.2");
+
+        addIntSlider(cat, eb, "show_damage.option.rotationDamping",
+                a.rotationDamping, da.rotationDamping, 80, 99, v -> a.rotationDamping = v,
+                "show_damage.tooltip.rotationDamping.1", "show_damage.tooltip.rotationDamping.2");
+    }
+
+    // ========== 风格设置 ==========
+
+    private static void addStyle(ConfigBuilder builder, ConfigEntryBuilder eb,
+                                 ModConfigs c, ModConfigs d) {
+        ConfigCategory cat = builder.getOrCreateCategory(t("show_damage.category.style"));
+
+        // 合并风格下拉框
+        List<String> mergeIds = new ArrayList<>();
+        List<String> mergeNames = new ArrayList<>();
+        for (MergeStyle style : StyleRegistry.getMergeStyles()) {
+            mergeIds.add(style.getId());
+            mergeNames.add(style.getDisplayName());
+        }
+        cat.addEntry(eb.startSelector(
+                        t("show_damage.option.mergeStyle"),
+                        mergeNames.toArray(new String[0]),
+                        styleName(c.mergeStyleId, mergeIds, mergeNames, d.mergeStyleId))
+                .setDefaultValue(styleName(d.mergeStyleId, mergeIds, mergeNames, d.mergeStyleId))
+                .setSaveConsumer(name -> {
+                    int i = mergeNames.indexOf(name);
+                    if (i >= 0) c.mergeStyleId = mergeIds.get(i);
+                })
+                .setTooltip(t("show_damage.tooltip.mergeStyle"))
+                .build());
+
+        // 独立风格下拉框
+        List<String> indIds = new ArrayList<>();
+        List<String> indNames = new ArrayList<>();
+        for (IndependentStyle style : StyleRegistry.getIndependentStyles()) {
+            indIds.add(style.getId());
+            indNames.add(style.getDisplayName());
+        }
+        cat.addEntry(eb.startSelector(
+                        t("show_damage.option.independentStyle"),
+                        indNames.toArray(new String[0]),
+                        styleName(c.independentStyleId, indIds, indNames, d.independentStyleId))
+                .setDefaultValue(styleName(d.independentStyleId, indIds, indNames, d.independentStyleId))
+                .setSaveConsumer(name -> {
+                    int i = indNames.indexOf(name);
+                    if (i >= 0) c.independentStyleId = indIds.get(i);
+                })
+                .setTooltip(t("show_damage.tooltip.independentStyle"))
+                .build());
+    }
+
+    // ========== 通用辅助方法 ==========
+
+    private static Component t(String key) {
+        return Component.translatable(key);
+    }
+
+    private static Component[] ts(String... keys) {
+        Component[] arr = new Component[keys.length];
+        for (int i = 0; i < keys.length; i++) arr[i] = t(keys[i]);
+        return arr;
+    }
+
+    private static void addBool(ConfigCategory cat, ConfigEntryBuilder eb,
+                                String key, boolean cur, boolean def,
+                                Consumer<Boolean> save, String... tips) {
+        cat.addEntry(eb.startBooleanToggle(t(key), cur)
+                .setDefaultValue(def)
+                .setSaveConsumer(save)
+                .setTooltip(ts(tips))
+                .build());
+    }
+
+    private static void addIntSlider(ConfigCategory cat, ConfigEntryBuilder eb,
+                                     String key, int cur, int def, int min, int max,
+                                     Consumer<Integer> save, String... tips) {
+        cat.addEntry(eb.startIntSlider(t(key), cur, min, max)
+                .setDefaultValue(def)
+                .setSaveConsumer(save)
+                .setTooltip(ts(tips))
+                .build());
+    }
+
+    private static void addFloat(ConfigCategory cat, ConfigEntryBuilder eb,
+                                 String key, float cur, float def,
+                                 Consumer<Float> save, String... tips) {
+        cat.addEntry(eb.startFloatField(t(key), cur)
+                .setDefaultValue(def)
+                .setSaveConsumer(save)
+                .setTooltip(ts(tips))
+                .build());
+    }
+
+    private static void addColor(ConfigCategory cat, ConfigEntryBuilder eb,
+                                 String key, int cur, int def,
+                                 Consumer<Integer> save, String... tips) {
+        cat.addEntry(eb.startColorField(t(key), cur)
+                .setDefaultValue(def)
+                .setSaveConsumer(save)
+                .setTooltip(ts(tips))
+                .build());
+    }
+
+    private static void addStr(ConfigCategory cat, ConfigEntryBuilder eb,
+                               String key, String cur, String def,
+                               Consumer<String> save, String... tips) {
+        cat.addEntry(eb.startStrField(t(key), cur)
+                .setDefaultValue(def)
+                .setSaveConsumer(save)
+                .setTooltip(ts(tips))
+                .build());
+    }
+
+    private static String styleName(String id, List<String> ids, List<String> names, String defaultId) {
+        int i = ids.indexOf(id);
+        if (i >= 0) return names.get(i);
+        i = ids.indexOf(defaultId);
+        return i >= 0 ? names.get(i) : names.get(0);
     }
 }

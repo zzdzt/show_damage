@@ -12,10 +12,10 @@ displayURL="${mod_url}"
 authors="${mod_authors}"
 
 description='''
-造成伤害时显示伤害数字。
+造成伤害时显示伤害数字
 功能特点：
-- 可自定义伤害数字的颜色和大小。
-- 可切换伤害是否累加显示模式。
+- 可自定义伤害数字的颜色和大小
+- 可切换伤害是否累加显示模式
 - 可配置伤害数字的物理效果（重力、初速度、持续时间）
 
 Displays floating damage number particles when deal damage.

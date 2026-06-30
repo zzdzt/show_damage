@@ -1,3 +1,4 @@
+// ClientEventHandler.java - 修改后的事件处理器
 package com.zzdzt.show_damage.client;
 
 import java.util.HashMap;
@@ -6,6 +7,11 @@ import java.util.Map;
 import java.util.Random;
 import java.util.WeakHashMap;
 
+import com.zzdzt.show_damage.client.style.DamageStyle;
+import com.zzdzt.show_damage.client.style.IndependentStyle;
+import com.zzdzt.show_damage.client.style.MergeStyle;
+import com.zzdzt.show_damage.client.style.StyleManager;
+import com.zzdzt.show_damage.client.style.StyleRegistry;
 import com.zzdzt.show_damage.config.ModConfigs;
 import com.zzdzt.show_damage.util.Color;
 
@@ -33,7 +39,8 @@ public class ClientEventHandler {
         DamageNumberParticle particle;
         float totalDamage;
         long lastHitTime;
-        Vec3 lastEntityPos; 
+        Vec3 lastEntityPos;
+        DamageStyle.Context context;
     }
     
     private static final Map<LivingEntity, MergeSession> mergeSessions = new HashMap<>();
@@ -94,7 +101,8 @@ public class ClientEventHandler {
                 session.particle.setFollowing(false);
                 
                 if (timeout && !dead && entity.isAlive()) {
-                    Vec3 currentPos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera());
+                    Vec3 currentPos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera(), 
+                        (MergeStyle) session.particle.getStyle());
                     session.particle.setPosition(currentPos.x, currentPos.y, currentPos.z);
                 }
                 
@@ -102,7 +110,8 @@ public class ClientEventHandler {
                 continue;
             }
             
-            Vec3 pos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera());
+            MergeStyle style = (MergeStyle) session.particle.getStyle();
+            Vec3 pos = getMergeDisplayPos(entity, mc.gameRenderer.getMainCamera(), style);
             session.particle.setPosition(pos.x, pos.y, pos.z);
             session.lastEntityPos = entity.position();
         }
@@ -124,19 +133,27 @@ public class ClientEventHandler {
             return;
         }
 
+        DamageStyle.Context context = new DamageStyle.Context(entity, damage, false,
+            config.performance.getLifetime());
+
         if (config.physics.isMergeEnabled()) {
-            handleMerge(mc, entity, damage, config);
+            handleMerge(mc, entity, damage, config, context);
         } else {
-            spawnIndependentParticle(mc, entity, damage, config);
+            spawnIndependentParticle(mc, entity, damage, config, context);
         }
     }
 
-    private static void handleMerge(Minecraft mc, LivingEntity target, float damage, ModConfigs config) {
+    private static void handleMerge(Minecraft mc, LivingEntity target, float damage, 
+                                   ModConfigs config, DamageStyle.Context context) {
         long now = System.currentTimeMillis();
         MergeSession session = mergeSessions.get(target);
+        
         ModConfigs.PhysicsConfig p = config.physics;
         ModConfigs.RenderingConfig r = config.rendering;
         ModConfigs.PerformanceConfig pf = config.performance;
+        
+        MergeStyle style = StyleManager.INSTANCE.getCurrentMergeStyle();
+        if (style == null) style = StyleRegistry.getMergeStyle(StyleRegistry.DEFAULT_MERGE_STYLE);
         
         if (session != null && session.particle.isAlive()) {
             session.totalDamage += damage;
@@ -147,12 +164,13 @@ public class ClientEventHandler {
                 calculateColor(session.totalDamage, config),
                 calculateScale(session.totalDamage, config),
                 pf.getLifetime(),
-                pf.getFadeStartRatio()
+                pf.getFadeStartRatio(),
+                session.totalDamage
             );
             
         } else {
             Camera camera = mc.gameRenderer.getMainCamera();
-            Vec3 pos = getMergeDisplayPos(target, camera);
+            Vec3 pos = getMergeDisplayPos(target, camera, style);
             
             DamageNumberParticle particle = new DamageNumberParticle(
                 mc.level,
@@ -165,13 +183,14 @@ public class ClientEventHandler {
                 p.getGravity(),
                 p.getInitialUpwardVelocity(),
                 p.getHorizontalSpreadFactor() * 2.0f,
-                false,
                 r.isShadowEnabled(),
                 r.getShadowOffsetX(),
                 r.getShadowOffsetY(),
                 r.shadowColor,
-                r.getTextAlpha(),      
-                r.getShadowAlpha()  
+                r.getTextAlpha(),
+                r.getShadowAlpha(),
+                style,
+                context
             );
             
             particle.setFollowing(true);
@@ -182,13 +201,13 @@ public class ClientEventHandler {
             newSession.totalDamage = damage;
             newSession.lastHitTime = now;
             newSession.lastEntityPos = target.position();
+            newSession.context = context;
             mergeSessions.put(target, newSession);
         }
     }
 
-    private static Vec3 getMergeDisplayPos(LivingEntity entity, Camera camera) {
-        ModConfigs config = ModConfigs.get();
-        double heightMultiplier = config.physics.getMergeHeightMultiplier();
+    private static Vec3 getMergeDisplayPos(LivingEntity entity, Camera camera, MergeStyle style) {
+        double heightMultiplier = style != null ? style.getFollowHeightOffset() : 1.1;
         Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * heightMultiplier, 0);
             
         if (camera == null) {
@@ -196,29 +215,37 @@ public class ClientEventHandler {
         }
         
         Vec3 cameraPos = camera.getPosition();
-        double offsetDist = entity.getBbWidth() * 0.5;
+        double offsetDist = style != null ? style.getFollowDistanceOffset() : entity.getBbWidth() * 0.5;
+        double horizontalOffset = style != null ? style.getHorizontalOffset() : 0.0;
         
         Vec3 toCamera = cameraPos.subtract(entityPos).normalize();
-        Vec3 offset = toCamera.scale(offsetDist);
+        Vec3 right = toCamera.cross(new Vec3(0, 1, 0)).normalize();
+        Vec3 offset = toCamera.scale(offsetDist).add(right.scale(horizontalOffset));;
         
         return entityPos.add(offset).add(0, 0.3, 0);
     }
 
-    private static void spawnIndependentParticle(Minecraft mc, LivingEntity target, float damage, ModConfigs config) {
+    private static void spawnIndependentParticle(Minecraft mc, LivingEntity target, float damage,
+                                                ModConfigs config, DamageStyle.Context context) {
         ModConfigs.PhysicsConfig p = config.physics;
         ModConfigs.RenderingConfig r = config.rendering;
         ModConfigs.PerformanceConfig pf = config.performance;
         
+        IndependentStyle style = StyleManager.INSTANCE.getCurrentIndependentStyle();
+        if (style == null) style = StyleRegistry.getIndependentStyle(StyleRegistry.DEFAULT_INDEPENDENT_STYLE);
+        
         Camera camera = mc.gameRenderer.getMainCamera();
-        Vec3 pos = getDisplayPos(target, camera);
+        Vec3 pos = getDisplayPos(target, camera, config);
         
-        double spread = p.getHorizontalSpreadFactor();
-        pos = pos.add(
-            (RANDOM.nextDouble() - 0.5) * spread * 0.5,
-            (RANDOM.nextDouble() - 0.5) * 0.1,
-            (RANDOM.nextDouble() - 0.5) * spread * 0.5
-        );
-        
+        // 应用风格的位置偏移
+        if (style != null) {
+            pos = pos.add(
+                (RANDOM.nextDouble() - 0.5) * 0.1,
+                (RANDOM.nextDouble() - 0.5) * 0.1,
+                (RANDOM.nextDouble() - 0.5) * 0.1
+            );
+        }
+
         DamageNumberParticle particle = new DamageNumberParticle(
             mc.level,
             pos.x, pos.y, pos.z,
@@ -230,20 +257,20 @@ public class ClientEventHandler {
             p.getGravity(),
             p.getInitialUpwardVelocity(),
             p.getHorizontalSpreadFactor() * 2.0f,
-            true,
             r.isShadowEnabled(),
             r.getShadowOffsetX(),
             r.getShadowOffsetY(),
             r.shadowColor,
-            r.getTextAlpha(),      
-            r.getShadowAlpha()
+            r.getTextAlpha(),
+            r.getShadowAlpha(),
+            style,
+            context
         );
         
         mc.particleEngine.add(particle);
     }
 
-    private static Vec3 getDisplayPos(LivingEntity entity, Camera camera) {
-        ModConfigs config = ModConfigs.get();
+    private static Vec3 getDisplayPos(LivingEntity entity, Camera camera, ModConfigs config) {
         double heightMultiplier = config.physics.getIndependentHeightMultiplier();
         Vec3 entityPos = entity.position().add(0, entity.getBbHeight() * heightMultiplier, 0);
         
@@ -261,7 +288,8 @@ public class ClientEventHandler {
     }
 
     private static String formatDamage(float damage) {
-        return (damage == (int) damage) ? String.valueOf((int) damage) : String.format("%.1f", damage);
+        ModConfigs.DisplayConfig display = ModConfigs.get().display;
+        return display.customPrefix + display.formatDamage(damage) + display.customSuffix;
     }
 
     private static int calculateColor(float damage, ModConfigs config) {
@@ -272,7 +300,8 @@ public class ClientEventHandler {
         if (damage < config.smallDamageThreshold) {
             return config.colorSmall;
         } else if (damage < config.mediumDamageThreshold) {
-            float t = (damage - config.smallDamageThreshold) / (config.mediumDamageThreshold - config.smallDamageThreshold);
+            float t = (damage - config.smallDamageThreshold) / 
+                     (config.mediumDamageThreshold - config.smallDamageThreshold);
             return Color.lerp(cSm, cMd, t).getRGB();
         } else {
             return config.colorLarge;
@@ -296,4 +325,5 @@ public class ClientEventHandler {
             session.particle.setFollowing(false);
         }
     }
+
 }

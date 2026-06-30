@@ -5,6 +5,7 @@
   "show_damage.category.physics": "物理效果",
   "show_damage.category.performance": "性能设置",
   "show_damage.category.rendering": "渲染设置",
+  "show_damage.category.style": "风格设置",
 
   "show_damage.option.enabled": "启用模组",
   "show_damage.option.smallThreshold": "小伤害阈值",
@@ -36,6 +37,8 @@
   "show_damage.option.shadowColor": "阴影颜色",
   "show_damage.option.useCustomFont": "使用自定义字体",
   "show_damage.option.forcedFont": "强制字体路径",
+  "show_damage.option.mergeStyle": "合并模式数字风格",
+  "show_damage.option.independentStyle": "独立模式数字风格",
 
 
   "show_damage.tooltip.enabled": "开启或关闭伤害数字显示功能。",
@@ -66,5 +69,66 @@
   "show_damage.tooltip.forcedFont1": "禁用自定义字体时强制使用的字体。",
   "show_damage.tooltip.forcedFont2": "格式：命名空间:路径（例如 minecraft:default）",
   "show_damage.tooltip.mergeModeHeight": "合并模式下数字显示在实体头顶的相对高度,\n数值为实体高度的百分比（110 = 1.1倍高度）",
-  "show_damage.tooltip.independentModeHeight": "独立模式下数字显示在实体头顶的相对高度,\n数值为实体高度的百分比（80 = 0.8倍高度）"
+  "show_damage.tooltip.independentModeHeight": "独立模式下数字显示在实体头顶的相对高度,\n数值为实体高度的百分比（80 = 0.8倍高度）",
+  "show_damage.tooltip.mergeStyle": "合并模式下使用的视觉风格,\n影响数字的动画和显示方式",
+  "show_damage.tooltip.independentStyle": "独立模式下使用的视觉风格,\n影响数字的动画和显示方式",
+
+  "show_damage.style.classic_merge.name": "经典合并",
+  "show_damage.style.pulse_merge.name": "脉冲合并",
+  "show_damage.style.popup_merge.name": "弹出合并",
+  "show_damage.style.bounce_merge.name": "弹跳合并",
+  "show_damage.style.typewriter_merge.name": "打字机合并",
+  "show_damage.style.energy_charge_merge.name": "聚能合并",
+  "show_damage.style.classic_pop.name": "经典弹出",
+  "show_damage.style.side_pop.name": "侧向弹出",
+  "show_damage.style.rainbow_pop.name": "彩虹弹出",
+  "show_damage.style.endfield_pop.name": "终末地弹出",
+  "show_damage.style.typewriter_pop.name": "打字机弹出",
+  "show_damage.style.danmaku_pop.name": "弹幕飘字",
+
+  "show_damage.category.display": "数值显示",
+  "show_damage.category.animation": "动画调整",
+
+  "show_damage.option.display": "数值显示",
+  "show_damage.option.animation": "动画调整",
+
+  "show_damage.option.showDecimal": "显示小数点",
+  "show_damage.option.decimalPlaces": "小数位数",
+  "show_damage.option.useThousandsSeparator": "千位分隔符",
+  "show_damage.option.enableAbbreviation": "量级缩写",
+  "show_damage.option.abbreviationThreshold": "缩写阈值",
+  "show_damage.option.customPrefix": "自定义前缀",
+  "show_damage.option.customSuffix": "自定义后缀",
+
+  "show_damage.option.scaleSmoothness": "缩放平滑度",
+  "show_damage.option.scaleDamping": "缩放阻尼",
+  "show_damage.option.maxOvershoot": "最大过冲倍数",
+  "show_damage.option.drag": "空气阻力",
+  "show_damage.option.maxSpeed": "最大速度",
+  "show_damage.option.rotationDamping": "旋转阻尼",
+
+  "show_damage.tooltip.showDecimal.1": "伤害数字是否显示小数部分。",
+  "show_damage.tooltip.showDecimal.2": "例如：123.4（开）vs 123（关）。",
+  "show_damage.tooltip.decimalPlaces.1": "显示小数点时的小数位数（0-2）。",
+  "show_damage.tooltip.decimalPlaces.2": "例如：1位小数显示 123.4，2位显示 123.45。",
+  "show_damage.tooltip.useThousandsSeparator": "是否用逗号分隔千位（例如：1,234）。",
+  "show_damage.tooltip.enableAbbreviation.1": "数字过大时使用 K/M/B 缩写。",
+  "show_damage.tooltip.enableAbbreviation.2": "例如：12345 → 12.3K，1500000 → 1.5M。",
+  "show_damage.tooltip.abbreviationThreshold.1": "达到此数值时开始缩写（1000-100000）。",
+  "show_damage.tooltip.abbreviationThreshold.2": "例如：设为10000时，超过1万才显示K。",
+  "show_damage.tooltip.customPrefix": "伤害数字前添加的固定文本（如 '伤害: '）。",
+  "show_damage.tooltip.customSuffix": "伤害数字后添加的固定文本（如 ' HP'）。",
+
+  "show_damage.tooltip.scaleSmoothness.1": "缩放动画的响应速度（10-90）。",
+  "show_damage.tooltip.scaleSmoothness.2": "数值越高，缩放变化越快（越硬）。",
+  "show_damage.tooltip.scaleDamping.1": "缩放动画的阻尼（50-99）。",
+  "show_damage.tooltip.scaleDamping.2": "数值越高，缩放停止越快（越稳定）。",
+  "show_damage.tooltip.maxOvershoot": "缩放最大过冲倍数（1.0-3.0）。",
+  "show_damage.tooltip.drag.1": "空气阻力大小（0.80-0.99）。",
+  "show_damage.tooltip.drag.2": "数值越高，速度衰减越慢（飘越远）。",
+  "show_damage.tooltip.maxSpeed.1": "伤害数字的最大移动速度（50-200）。",
+  "show_damage.tooltip.maxSpeed.2": "防止数字飞太快看不清。数值/100 = 方块/刻。",
+  "show_damage.tooltip.rotationDamping.1": "旋转速度的衰减速度（80-99）。",
+  "show_damage.tooltip.rotationDamping.2": "数值越高，旋转停止越快。"
+
 }
